@@ -12,3 +12,12 @@ In the webview, clicking on any of the node in the tree shows you the operations
 
 
 ![alt text](https://github.com/reddy2004/REDFS_Storage_Spaces/blob/main/REDFS_Storage_Spaces/Data/Screenshots/vol_options.png)
+
+
+REDFS Storage Space itself is spread over multiple regular NTFS files potentially located at different places. Since REDFS is a single node, i.e single computer filesystem, it means that all the files managed by REDFS must be accessible from the computer where REDFS is run. The files that are included as part of the REDFS managed storage must be accessible by a windows style path and should be a multiple of 1GB. REDFS spreads data over these files, also called CHUNKS, so that we can achieve data redundancy. For ex. You could include 5 chunk files managed by REDFS. These could be C:\1.dat, D:\1.dat, E:\1.dat, F:\abc.dat, G:\xyz.dat. Since these chunk files are present on 5 different physical drives, REDFS could stripe data on them to achive MIRRORing or say RAID5 to protect data in the volumes.
+
+![alt text](https://github.com/reddy2004/REDFS_Storage_Spaces/blob/main/REDFS_Storage_Spaces/Data/Screenshots/config_main.png)
+
+You can specify what is the speed class of the Chunk when you add it to REDFS. The summary is available in the config tab.
+
+![alt text](https://github.com/reddy2004/REDFS_Storage_Spaces/blob/main/REDFS_Storage_Spaces/Data/Screenshots/config_chunks.png)
