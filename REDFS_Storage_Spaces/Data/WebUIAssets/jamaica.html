@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en" ng-app="myApp11">
+    <head>
+        <!-- Required meta tags -->
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+
+        <title>REDFS</title>
+    </head>
+    <body>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+        <script src="http://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+        <script src="https://unpkg.com/konva@2.4.2/konva.min.js"></script>
+
+        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.20/css/jquery.dataTables.css">
+        <link rel="stylesheet" type="text/css" href="loader.css">
+        <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.7.9/angular.min.js"></script>
+        <script src="https://canvasjs.com/assets/script/jquery.canvasjs.min.js"></script>
+        <script src="slideGraph.js"></script>
+        <script src="https://unpkg.com/bootstrap-table@1.14.2/dist/bootstrap-table.min.js"></script>
+        <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.0rc1/angular-route.min.js"></script> 
+        <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js"></script> 
+        
+        <div ng-controller="myCtrl">
+
+
+            <!-- Modal in progress -->
+            <div class="modal fade" id="browserFolderModalOverModal" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_9" aria-hidden="true">
+              <div class="modal-dialog modal-l" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_7">Browser Folder On Host Computer <a href="#" ng-click="toggleDebug()"> (debug) </a></h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+
+                        <div ng-show="showdebuginfo"  style="color:red;">
+                            {{isDebugData}}
+                            <br> <br>
+                        </div>
+
+                            <div style="display: block;position: relative;height: 600px;overflow: auto;"> 
+                                <table id="table">
+                                  <thead>
+                                    <tr>
+                                      <th data-field="id">Wait, showing "{{viewingParentFolder}}"</th>
+                                    </tr>
+                                  </thead>
+                                    <tbody>
+                                        <tr ng-repeat="itemname in itemsInFolderForBackupTaskBrowser.files">
+                                            <td>
+                                            <a href="" ng-click="listFoldersAndFiles(itemname)">{{itemname}}</a>
+                                            </td>
+                                        </tr>
+                                        <tr ng-repeat="itemname in itemsInFolderForBackupTaskBrowser.directories">
+                                            <td>
+                                            <a href="" ng-click="listFoldersAndFiles(itemname)">{{itemname}}</a>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" ng-click="dontAddFolderToBackupTask()">Close</button>
+                        <button type="button" class="btn btn-info" ng-click="addItemToBackupTask(viewingParentFolder)" >Backup "{{viewingParentFolder}}"</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+
+            <!-- Modal in progress -->
+
+            <div class="modal fade" id="newBackupTaskModal" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_8" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_8">Create New Backup Task</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> <b> Attributes </b> </td>
+                                    <td style="width:50%; padding: 10px;"> <b> Values </b></td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Backup Task Name </td>
+                                    <td style="width:50%; padding: 10px;"> <input type="text" name="volname" id="m2_backup_task" value=""> </td>
+                                </tr>
+                                    <tr ng-repeat="path in tobackup.listOfFoldersToBackup">
+                                        <td>
+                                        {{path}}
+                                        </td>
+                                        <td> <a href="" ng-click="removeEntryFromBackupList(path)"> (remove) </a> </td>
+                                    </tr>
+                                    <tr ng-repeat="path in tobackup.listOfFilesToBackup">
+                                        <td>
+                                        {{path}}
+                                        </td>
+                                        <td> <a href="" ng-click="removeEntryFromBackupList(path)"> (remove)</a> </td>
+                                    </tr>
+                                <tr>
+                                    <td> Folders in this backup</td>
+                                    <td>
+                                            <button type="button" class="btn btn-secondary btn-sm" ng-click="folderBrowser()"> Browse & add.. </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-info" ng-click="createNewBackupTaskInContainer()">Create</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Modal in progress -->
+            <div class="modal fade" id="newChunkModal" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_7" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_7">Add a new file (aka chunk) to this container</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        Chunk is a single file which is like a vmdk or vhd file. The data of volumes in this container will be
+                        stored inside this file depending on the need or user specified protection levels.
+                        <br> <b> Default </b> Only segments which are not protected are created in this chunk file. <br>
+                        <b> Mirror </b> This chunk file can only have segments that are 2x mirror protected. <br>
+                        <b> RAID5 </b> This chunk segments must always be part of a RAID 5 protection group <br><br>
+                        You can create a chunk which allows either one or a comibination of protection level segments to be created within it.
+                        <br>
+                        <br>
+                        <br>
+                        <div>
+                            <label for="speedclass">Type of storage</label>
+                            <select class="custom-select" id="speedclass">
+                              <option selected>Select Speed class</option>
+                              <option value="Internal SATA HDD">Internal SATA HDD</option>
+                              <option value="Internal SATA SSD">Internal SATA SSD</option>
+                              <option value="NVM-e SSD">NVM-e SSD</option>
+                              <option value="USB3 Flash">USB3 Flash</option>
+                              <option value="USB3 HDD">USB3 HDD</option>
+                              <option value="GiG-E Network Drive">GiG-E Network Drive</option>
+                              <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <br>
+                        <div>
+                            <label for="filepath11">FilePath of chunk</label>
+                            <input type="text" class="form-control" id="filepath11" placeholder="Provide path, Ex. C:\regular.redfs">
+                        </div>
+                        <br>
+                        <div>
+                            <label for="sizeingb11">Size in GB (Min 1GB, Max 1024GB)</label>
+                            <input type="text" class="form-control" id="sizeingb11" placeholder="Provide value in GB. Ex 2">
+                        </div>
+                        <br>
+                        <div>
+                            <label for="allowedTypes">Protection Level</label>
+                            <select class="custom-select" id="allowedTypes">
+                              <option selected>What kind of segments may be created?</option>
+                              <option value="1">Default only. No RAID5 or Mirror segments.</option>
+                              <option value="7">ANY, i.e default, Mirror or RAID5</option>
+                              <option value="4">RAID5 segments only</option>
+                              <option value="2">Mirrored Segments only</option>
+                              <option value="6">Either RAID5 or Mirror</option>
+                            </select>
+                        </div>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-info" ng-click="addNewChunkForCurrentContainer()" >Save</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+
+            <!-- Modal in progress -->
+            <div class="modal fade" id="singleChunkOperation" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_6" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_6">Take an action on this chunk (id: {{currViewingChunkId.id}})<a href="#" ng-click="toggleDebug()"> (debug) </a></h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                           
+                        <div ng-show="showdebuginfo"  style="color:red;">
+                            {{currViewingChunkId}}
+                            <br> <br>
+                        </div>
+                        
+                        <table>
+                            <thead>
+                                <tr>
+                                    <td style="width:10%;"> <b> Op </b> </td>
+                                    <td style="width:60%;"> <b> Description </b></td>
+                                    <td style="width:30%;"> <b> Click </b></td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td> Prepare For Removal </td>
+                                    <td>In this type of operation, no new data is written to this chunk and all data will be moved away to other chunks by a background scanner. This chunk will be marked read-only. </td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-info" data-dismiss="modal"  ng-click="ChunkRemoveOrMoveOrDeleteOperation('removal')" ng-disabled="currViewingChunkId.id == 0 || currViewingChunkId.creationInProgress == true">Prepare for Removal</button></td>
+                                </tr>
+                                <tr>
+                                    <td> Move Chunk</td>
+                                    <td> Move chunk will simply copy the chunk to a new location and update the container meta data. Use this option if you would like to move the chunk files to a different location.</td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-info" data-dismiss="modal"  ng-click="ChunkRemoveOrMoveOrDeleteOperation('move')" ng-disabled="currViewingChunkId.id == 0 || currViewingChunkId.creationInProgress == true">Move Chunk</button></td>
+                                </tr>
+                                <tr>
+                                    <td> Make Read-Only </td>
+                                    <td> Marks the chunk read only, no new data is added </td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-info" data-dismiss="modal" ng-disabled="currViewingChunkId.id == 0 || currViewingChunkId.isReadOnly == true || currViewingChunkId.creationInProgress == true" click="ChunkRemoveOrMoveOrDeleteOperation('readonly')">Mark Read-Only</button></td>
+                                </tr>
+                                <tr>
+                                    <td> Delete </td>
+                                    <td> Deletes all the contents of the volume, Delete will only be enabled once all the data in the chunk is moved elsewhere </td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-danger" data-dismiss="modal"   ng-disabled="currViewingChunkId.id == 0 || currViewingChunkId.canDeleteChunk == false || currViewingChunkId.creationInProgress == true" ng-click="ChunkRemoveOrMoveOrDeleteOperation('delete')">Delete</button></td>
+                                </tr>
+                                <tr>
+                                    <td> Force Delete </td>
+                                    <td> Deletes the chunk. You will lose data and your file system integrety is compromised. Do not use this option other than for testing. </td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-danger" data-dismiss="modal" ng-disabled="currViewingChunkId.id == 0" ng-click=" ChunkRemoveOrMoveOrDeleteOperation('forcedelete')">Force Delete!</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div ng-show="currViewingChunkId.creationInProgress">
+                                <br><br> <b>
+                                Creating {{currViewingChunkId.path}} <br>
+                                Please check in the Metrics tab. </b>
+                        </div>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-info" >Save</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+
+            <!-- Modal in progress-->
+            <div class="modal fade" id="actionOnBackupTask" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_5" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_5">Take an action on this backup task (id: {{currentlyViewingBackupTask.serial}})</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        
+                        <table>
+                            <thead>
+                                <tr>
+                                    <td style="width:10%;"> <b> Op </b> </td>
+                                    <td style="width:60%;"> <b> Description </b></td>
+                                    <td style="width:30%;"> <b> Click </b></td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td> Run Backup </td>
+                                    <td>Creates a new job that backs up all the files and folders of this task.</td>
+                                    <td style="border:1px;"> <label><b> Jobname : </b></label><input type="text" size=30 id="jobnametext"> </input>
+                                        <button style="width: 100%" type="button" class="btn btn-info" data-dismiss="modal"  ng-click="runBackupTask(currentlyViewingBackupTask.serial)" ng-disabled="currentlyViewingBackupTask.isJobActive">Run Backup</button></td>
+                                </tr>
+                                    <td> Delete </td>
+                                    <td> Deletes the complete backup and all the jobs. This cannot be undone! </td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-danger" data-dismiss="modal"  ng-click="deleteBackup(currentlyViewingBackupTask.serial)">Force Delete!</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <br>
+                        <div ng-show="currentlyViewingBackupTask.isJobActive"> <b>There is an active job running </b> </div>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+             
+
+            <!-- Modal in progress  -->
+            <div class="modal fade" id="listOfJobsForTask" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_4" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_4">Backup Jobs' History</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <td style="width:20%;"> <b> Jobname </b> </td>
+                                    <td style="width:15%;"> <b> Data Copied </b></td>
+                                    <td style="width:15%;"> <b> Inodes </b></td>
+                                    <td style="width:25%;"> <b> Start </b></td>
+                                    <td style="width:25%;"> <b> End </b></td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                    <tr ng-repeat="job in currentlyViewingBackupTask.backupJobs">
+                                        <td>{{job.jobname}} </td>
+                                        <td>{{job.dataCopied}} </td>
+                                        <td>{{job.numInodes}} </td>
+                                        <td>{{job.job_start}} </td>
+                                        <td>{{job.job_end}} </td>
+                                    </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+           
+
+            <!-- Modal in progress -->
+            <div class="modal fade" id="listOfFilesAndFoldersForTask" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_10" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_4">Backup Tasks Files & Folders' list <a href="#" ng-click="toggleDebug()"> (debug) </a></h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        <div ng-show="showdebuginfo"  style="color:red;">
+                            {{listOfKnownBackupsInContainer}}
+                            <br> <br>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> <b> List of Files & Folders that will be backed up for this task. </b> </td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                    <tr ng-repeat="path in listOfFoldersToBackup">
+                                        <td>
+                                        {{path}}
+                                        </td>
+                                    </tr>
+                                    <tr ng-repeat="path in listOfFilesToBackup">
+                                        <td>
+                                        {{path}}
+                                        </td>
+                                    </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            
+            <!-- Modal in progress -->
+            <div class="modal fade" id="dedupeJob" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_11" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_11"> Dedupe across container</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        Dedupe runs as a background process and you can monitor the progress in the 'Live Metrics' tab. This job will only work on the new data that has been written since
+                        the last dedupe job.
+
+                        <br><br>
+                        <div ng-show="compressionAndDedupeData.dedupeIsRunning">
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar" style="width:{{compressionAndDedupeData.dedupePercent}}%;" aria-valuenow="{{compressionAndDedupeData.dedupePercent}}" aria-valuemin="0" aria-valuemax="100"></div>
+                                    <br>
+
+                                </div>
+                                Started {{compressionAndDedupeData.dedupeStartTime}} [ {{compressionAndDedupeData.dedupePercent}}% Complete]
+                        </div>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button"  class="btn btn-info"  ng-show="!compressionAndDedupeData.dedupeIsRunning" ng-click="StartDedupeJob()">Start Dedupe</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Modal in progress -->
+            <div class="modal fade" id="compressJob" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_12" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_12"> Compress container data</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        Compression happens at the logical file level. Every 64k aligned blocks of the file are compressed. If the said 64k data is already deduped, then compression scanner
+                        will skip such data segments. It is possible for two files with same content to be deduped after being compressed. If you have a data set that has lot of same 4k blocks, a higher
+                        space saving can be achieved by running compression followed by dedupe.
+
+                        <br><br>
+                        <div ng-show="compressionAndDedupeData.compressionIsRunning">
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar" style="width:{{compressionAndDedupeData.compressionPercent}}%;" aria-valuenow="{{compressionAndDedupeData.compressionPercent}}" aria-valuemin="0" aria-valuemax="100"></div>
+                                    <br>
+                                </div>
+                                Started {{compressionAndDedupeData.compressionStartTime}} [ {{compressionAndDedupeData.compressionPercent}}% Complete]
+                        </div>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button"  class="btn btn-info" ng-show="!compressionAndDedupeData.compressionIsRunning" ng-click="StartCompressJob()">Compress Data</button>
+                        
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Modal -- works  -->
+            <div class="modal fade" id="volumeSnapshotOrCloneOrDelete" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_3" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_3">Mount, Clone, Snapshot or Delete volume</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <td style="width:10%;"> <b> Op </b> </td>
+                                    <td style="width:20%;"> <b> Image </b></td>
+                                    <td style="width:60%;"> <b> Description </b></td>
+                                    <td style="width:10%;"> <b> Click </b></td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td> Backed Clone</td>
+                                    <td> <img src="clone.png"> </td>
+                                    <td>In this type of clone, the volume you want to clone is also snapshoted. The volume 'volA' that you want to clone moves one step forward due to this cloning operation as seen in the diagram. This gives you a snapshot version of volA when the clone was created. </td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-info" data-dismiss="modal" ng-disabled="false == currentlyViewingVolAllowAllOperations" ng-click="volumeSnapshotOrCloneOrDelete('backedclone')">Backed Clone</button></td>
+                                </tr>
+                                <tr>
+                                    <td> Direct Clone</td>
+                                    <td> <img src="justclone.png"> </td>
+                                    <td> Unlike the earlier version, a clone is created volA1 without a snapshot. From this point on volA1 and D can be modifed seperately. You will not have a point in time copy of the volume volA1 when it was cloned</td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-info" data-dismiss="modal" ng-click="volumeSnapshotOrCloneOrDelete('clone')">Clone</button></td>
+                                </tr>
+                                <tr>
+                                    <td> Snapshot </td>
+                                    <td> <img src="snapshot.png"> </td>
+                                    <td> This creates a regular snapshot of volA and moves the volume one step ahead. </td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-info" data-dismiss="modal" ng-disabled="false == currentlyViewingVolAllowAllOperations" ng-click="volumeSnapshotOrCloneOrDelete('snapshot')">Snapshot</button></td>
+                                </tr>
+                                <tr>
+                                    <td> Delete </td>
+                                    <td> <img src="delete.png"> </td>
+                                    <td> Deletes all the contents of the volume, but does not remove it from the graph. This may or may not free up space in the container depending on how much of the data in that volume is already deduped </td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-danger" data-dismiss="modal"  ng-click="volumeSnapshotOrCloneOrDelete('delete')">Delete</button></td>
+                                </tr>
+                                <tr>
+                                    <td> Mount </td>
+                                    <td> <img src="mount.png"> </td>
+                                    <td> Mounts the volume in Drive R:\. You can browse the contents of this volume from windows explorer </td>
+                                    <td><button style="width: 100%" type="button" class="btn btn-primary" data-dismiss="modal"  ng-disabled="currentlyViewingVolumeDisableMountAndUnmountButton" ng-click="volumeSnapshotOrCloneOrDelete('mountOrUnmount')"> {{currentlyMountedVolumeIdGlobalText}}</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+
+            <!-- Modal -- works  -->
+            <div class="modal fade" id="volumeInformation" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_2" aria-hidden="true">
+              <div class="modal-dialog modal-xm" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_2">
+                       <b ng-show="isCurrentlyViewingVolumeDeleted">DELETED</b> Volume information
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        <table >
+                            <thead>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> <b> Attributes </b> </td>
+                                    <td style="width:50%; padding: 10px;"> <b> Values </b></td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Volume Name </td>
+                                    <td style="width:50%; padding: 10px;"> <input type="text" name="volname" id="m2_volname" value=""> </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Creation Time</td>
+                                    <td style="width:50%; padding: 10px;"> {{currentlyViewingVolumeCreationTime}} </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Volume Id</td>
+                                    <td style="width:50%; padding: 10px;"> {{currentlyViewingVolumeId}} </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Description</td>
+                                    <td style="width:50%; padding: 10px;">  <input type="text" name="voldesc" id="m2_voldesc" value=""> </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Color </td>
+                                    <td style="width:50%; padding: 10px;">  <input type="color" id="m2_volcolor" name="volcolor" value="#ff0000"> </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Logical Data </td>
+                                    <td style="width:50%; padding: 10px;"> {{currentlyViewingVolumeLogicalData}} GB </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> RAW Ondisk Data </td>
+                                    <td style="width:50%; padding: 10px;"> <a href="#" ng-click="GetInternalDataOfFSID(currentlyViewingVolumeId)"> View </a> </td>                                   
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button"  class="btn btn-info" ng-show="false == isCurrentlyViewingVolumeDeleted" ng-click="actionOnVolume()">Volume Actions</button>
+                        <button type="button"  class="btn btn-info" ng-show="false == isCurrentlyViewingVolumeDeleted" ng-click="saveVolumeInformation()">Save</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+           
+
+            <!-- Modal -- works  -->
+            <div class="modal fade" id="createNewVolumeFromRootVolume" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_1" aria-hidden="true">
+              <div class="modal-dialog modal-xm" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_1">New Empty Volume</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> <b> Attributes </b> </td>
+                                    <td style="width:50%; padding: 10px;"> <b> Values </b></td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Volume Name</td>
+                                    <td style="width:50%; padding: 10px;"> <input type="text" name="volname" id="m1_volname" value=""> </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Creation Time</td>
+                                    <td style="width:50%; padding: 10px;"> Now </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Volume Id</td>
+                                    <td style="width:50%; padding: 10px;"> (Assigned on creation) </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Description</td>
+                                    <td style="width:50%; padding: 10px;">  <input type="text" name="voldesc" id="m1_voldesc" value=""> </td>
+                                </tr>
+                                <tr>
+                                    <td style="width:50%; padding: 10px;"> Color </td>
+                                    <td style="width:50%; padding: 10px;">  <input type="color" name="volcolor" id="m1_volcolor" value="#ff0000"> </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="button"  class="btn btn-info" ng-click="CreateNewZeroVolume()">Save</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+           
+
+
+            <div class="container-fluid bg-dark">
+                <div class="row">
+                    <div class="col-10 bg-light" style="padding: 15px; text-align: center; border-radius: 25px;">
+                        <b> REDFS "File System" Container WebUI</b> <br>
+                        ( Cookie : {{globalData.connectedFrom}} ) <br>
+                        <b> Viewing Container : "{{CurrentlyMountedContainer}}" </b> <br>
+                    </div>
+                    <div class="col-2 bg-link" style="padding: 15px; text-align: center;">
+                        <a href="#" ng-click="unmount()"> Unmount </a>
+                    </div>
+                </div>
+                <div class="row" style="'background-color': 'black';">
+                    <div class="col-12 bg-info" style="padding: 2px;">
+                    </div>
+                </div>
+
+                <div class="container-fluid" style="padding: 10px; ">
+                    <div class="row">
+                        <div id="sharedvols" class="col-3 bg-link" style="padding: 5px; text-align: center;">
+                            <a href="#" ng-click="gotoTab('mountedVolume')"> Volume Tree </a>
+                        </div>
+                        <div id="snapshotvols" class="col-3 bg-link" style="padding: 5px; text-align: center;">
+                            <a href="#" ng-click="gotoTab('allSnapshots')"> All vols/snapshots/clones </a>
+                        </div>
+                        <div id="aggrops" class="col-3 bg-link" style="padding: 5px; text-align: center;">
+                            <a href="#" ng-click="gotoTab('liveMetrics')"> Live Metrics </a>
+                        </div>
+                        <div id="aggrconfig" class="col-3 bg-link" style="padding: 5px; text-align: center;">
+                            <a href="#" ng-click="gotoTab('config')"> Config </a>
+                        </div>
+                    </div>
+                    <div class="row" style="height: 10px;">
+                        <div class="col-12 bg-light"> </div>
+                    </div>
+                    <div class="row" ng-show="currentTab == 'mountedVolume'">
+                        <div class="col-12 bg-light" id="konvaPad">
+                            
+                        </div>
+                    </div>
+                    <div class="row" ng-show="currentTab == 'allSnapshots'">
+                        <div class="loader"></div>
+                        <div id="xtable" class="col-12 bg-light" style="padding:15px;">
+                            <table id="table_id" class="display table" style="width:100%;">
+                                <thead>
+                                    <tr>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="xconfig" class="col-12 bg-light" style="padding:15px;">
+                        </div>
+                    </div>
+                    <div class="row" ng-show="currentTab == 'liveMetrics'">
+                        <div class="col-12 bg-light">
+                            <br><br>
+                            <h5 ng-style="myrightstyle"> Ongoing and Completed Operations in this container <a href="#" ng-click="toggleDebug()"> (debug) </a> </h5>
+                            <br>
+                            <div ng-show="showdebuginfo"  style="color:red;">
+                                {{isDebugDataForProgress}}
+                                <br> <br>
+                            </div>
+
+                            <div id="rightslideout" ng-style="myrightstyle">
+                                <table class="table" style="width:100%;">
+                                    <thead>
+                                        <tr>
+                                            
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr ng-repeat="oper in inProgressOpsList">
+                                            <td> 
+                                                    <b style="color:gray;">{{oper.OpName}} </b> <a href="#" ng-show="oper.width == 100" ng-click="removeCompletedOperation(oper.id)"> (remove) </a>
+                                                    <br>
+                                                    <div class="progress">
+                                                        <div class="progress-bar" role="progressbar" style="width:{{oper.width}}%;" aria-valuenow="{{oper.width}}" aria-valuemin="0" aria-valuemax="100"></div>
+                                                    </div>
+
+                                                    <p style="color:gray; font-size: 12px">  {{oper.opmessage}} ({{oper.width}} %) </p>
+
+                                            </td>
+                                        </tr>
+                                    <tbody>
+                                </table>
+                            </div>
+
+                            <div ng-show="false">
+                                <h5 ng-style="myrightstyle"> Space Usage in Container <a href="#" ng-click="toggleDebug()"> (debug) </a> </h5>
+                                <br>
+                                <div ng-show="showdebuginfo"  style="color:red;">
+                                    {{isDebugDataForPieGraph}}
+                                    <br> <br>
+                                </div>
+                                <div id="konvaPie" style="height: 500px; max-width: 920px; margin: 0px auto; align-content: center;"></div>
+                            </div>
+
+                            <br>
+                            <h5 ng-style="myrightstyle"> Graphs <a href="#" ng-click="toggleDebug()"> (debug) </a> </h5>
+                            <br>
+                            <div ng-show="showdebuginfo"  style="color:red;">
+                                {{isDebugDataForGraphs}}
+                                <br> <br>
+                            </div>
+
+                            <div id="chartContainerRW" style="height: 300px; width: 80%; margin: auto;"></div> <br>
+                            <div id="chartContainerRefs" style="height: 300px; width: 80%; margin:  auto;"></div> <br>
+                            <div id="chartContainerDirty" style="height: 300px; width: 80%; margin:  auto;"></div> <br>
+                            <div id="chartContainerSpace" style="height: 300px; width: 80%; margin: auto;"></div> <br>
+
+                        </div>
+                    </div>
+                    <div class="row" ng-show="currentTab == 'config'">
+                        <div class="col-12 bg-light">
+                            <b> Backup Tasks </b> <a href="#" ng-click="toggleDebug()"> (debug) </a>
+                            <div ng-show="showdebuginfo"  style="color:red;">
+                                {{isDebugDataForBackupTasks}}
+                                <br> <br>
+                            </div>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <td style="width: 5%;"> <b> No. </b> </td>
+                                        <td style="width: 40%;"> <b> Task Name </b> </td>
+                                        <td style="width: 10%;"> <b> Num Jobs Run </b> </td>
+                                        <td style="width: 15%;"> <b> Last backup </b></td>
+                                        <td style="width: 10%;"> <b> Space Usage </b> </td>
+                                        <td style="width: 10%;"> <b> Status </b> </td>
+                                        <td style="width: 10%;"> <b> Operation </b> </td>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr ng-repeat="backupitem in listOfKnownBackupsInContainer.listOfTasks">
+                                        <td> {{backupitem.serial}} </td>
+                                        <td> <a href="#" ng-click="listOfFilesAndFoldersForTask(backupitem.serial)"> {{backupitem.taskName}}  </a>  </td>
+                                        <td> <a href="#" ng-click="listOfJobsForTask(backupitem.serial)"> {{backupitem.numJobsRun}}  </a></td>
+                                        <td> {{backupitem.lastJobTime}} </td>
+                                        <td> {{backupitem.backupSpaceUsage}} </td>
+                                        <td> {{backupitem.status}} </td>
+                                        <td> <a href="#" ng-click="actionOnBackupTask(backupitem.serial)"> click  </a> </td>
+                                    </tr>
+                                    <tr>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                    </tr>
+                                    <tr>
+                                        <td> </td>
+                                        <td> </td>
+                                        <td> </td>
+                                        <td> Total </td>
+                                        <td> {{listOfKnownBackupsInContainer.totalSpaceUsage}} </td>
+                                        <td> </td>
+                                        <td> <button type="submit" ng-click="CreateNewBackupTask()">Create new Task</button> </td>
+                                    </tr>
+                                <tbody>
+                            </table>
+                        </div>
+
+                        <br><br><br><br><br><br><br><br>
+                        <div class="col-12 bg-light">
+                            <b> Container's File chunks, speed classes and sizes </b> <a href="#" ng-click="toggleDebug()"> (debug) </a>
+                            <div ng-show="showdebuginfo" style="color:red;">
+                                {{isDebugDataForChunkFiles}}
+                                <br> <br>
+                            </div>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <td style="width: 5%;"> <b> No. </b> </td>
+                                        <td style="width: 45%;"> <b> Path </b> </td>
+                                        <td style="width: 10%;"> <b> Speed Class </b> </td>
+                                        <td style="width: 10%;"> <b> Size (GB) </b></td>
+                                        <td style="width: 10%;"> <b> Free Space (MB) </b> </td>
+                                        <td style="width: 10%;"> <b> Status </b> </td>
+                                        <td style="width: 10%;"> <b> Operation </b> </td>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr ng-repeat="chunk in listOfKnownChunksInContainer">
+                                        <td> {{chunk.id}} </td>
+                                        <td> {{chunk.path}} </td>
+                                        <td> {{chunk.speedClass}} </td>
+                                        <td> {{chunk.size}} </td>
+                                        <td> {{chunk.freeSpace}} </td>
+                                        <td> {{chunk.status}} </td>
+                                        <td> <a href="#" ng-show="!chunk.isBeingPreparedForRemoval" ng-click="singleChunkOperation(chunk.id)"> click  </a> <a href="#" ng-show="chunk.isBeingPreparedForRemoval"> -  </a></td>
+                                    </tr>
+                                    <tr>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                    </tr>
+                                    <tr>
+                                        <td> </td>
+                                        <td> </td>
+                                        <td> Total </td>
+                                        <td> {{totalSizeInGB}} GB </td>
+                                        <td> {{totalFreeChunkSpace}} MB </td>
+                                        <td> <button type="submit" ng-click="AddNewChunk()">Add New Chunk</button> </td>
+                                    </tr>
+                                <tbody>
+                            </table>
+                        </div>
+
+
+                        <br><br><br>
+                        <div class="col-12 bg-light">
+                            <b> Encryption, Mirroring, Compression & Dedupe options </b>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <td style="width: 15%;"> <b> Operation </b> </td>
+                                        <td style="width: 70%; text-align: center;"> <b> Description </b> </td>
+                                        <td style="width: 15%;"> <b> Click </b> </td>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td> Compression </td>
+                                        <td style="text-align: center; padding-left: 100px; padding-right: 100px;"> Compression happens only on data that is not deduped. If inline compression is enabled, all the new data that is written is compressed. Compression may either positively or negatively affect dedupe savings. Enable compression also has performance impact. </td>
+                                        <td> <a href="" ng-click="showCompressionPopup()"> Start compression / Show status</a></td>
+                                    </tr>
+                                    <tr>
+                                        <td> Dedupe </td>
+                                        <td style="text-align: center; padding-left: 100px; padding-right: 100px;"> Dedupe can be run on the entire container. Dedupe may not achieve optimal savings depending on how the data is compressed. </td>
+                                        <td> <a href="" ng-click="showDedupePopup()"> Start dedupe / Show status </a> </td>
+                                    </tr>
+                                <tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </body>
+</html>
+
+

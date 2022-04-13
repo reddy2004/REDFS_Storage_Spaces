@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" ng-app="myLoginApp">
+    <head>
+        <!-- Required meta tags -->
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+
+        <title>REDFS Login</title>
+    </head>
+    <body>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+        <script src="http://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+        <script src="https://unpkg.com/konva@2.4.2/konva.min.js"></script>
+        <!--
+        <script src="https://raw.githubusercontent.com/eligrey/FileSaver.js/master/src/FileSaver.js"></script>
+        -->
+        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.20/css/jquery.dataTables.css">
+        <link rel="stylesheet" type="text/css" href="loader.css">
+
+        <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.js"></script>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.7.9/angular.min.js"></script>
+        <script src="loginCtrl.js"></script>
+
+        
+        <div ng-controller="myLogin">
+
+            <div class="container-fluid bg-dark">
+                <!-- Content here -->
+                <div class="row">
+                    <div class="col-12 bg-light" style="padding: 15px; text-align: center; border-radius: 5px;">
+                        <b> REDFS Login Page</b> <br>
+                        Choose your container file from the given list and then enter the credentials for that container. <br>
+                        Alternatively, you can also create a new container on this host. <br>
+                        <a href="/login"> Refresh </a> &nbsp; &nbsp; &nbsp; &nbsp; <a href="/shutdown"> Shutdown </a> 
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12 bg-dark" style="padding: 5px;">
+
+                    </div>
+                </div>
+                <div class="row" ng-show="displayflags.isLoggedIn == true">
+                    <div class="col-12 bg-dark" style="padding: 20px;">
+                         <button type="button" class="btn btn-light btn-sm" style="width: 100%;" ng-click="logout()">Logout</button>
+                    </div>
+                </div>
+                <div class="row" ng-show="false == displayflags.isLoggedIn && false == displayflags.newContainerForm">
+                    <div id="loginform" class="container-fluid bg-light" style=" padding:10px; text-align: center; height: 100%;">
+                        <form method="post">
+
+                            <div class="container">
+                                <label for="containers"><b>Choose Container</b></label>
+                                <!--
+                                <select name="containers" id="container" (change)="onChange($event.target.value)">
+                                    <option *ngFor="let co of containerList" [ngValue]="co">
+                                        {{ co }}
+                                    </option>
+                                  <option disabled selected value> -- select an option -- </option>
+                                </select>
+                                -->
+                                <select name="containers" id="container" ng-model="selectedContainer" 
+                                        ng-options="i for i in containerList">
+                                    <option></option>
+                                </select>                                
+                                or <a href="#" ng-click="newContainer()"> Create new container</a> <br>
+                                {{existingMountedMessage}}
+                                 <br> <br> <br>
+                                <label for="uname"><b>Username</b></label>
+                                <input id="uname" type="text" placeholder="Enter Username" name="uname" required> <br>
+
+                                <label for="psw"><b>Password</b></label>
+                                <input id="upassword" type="password" placeholder="Enter Password" name="psw" required> <br>
+
+                                <button type="submit" ng-click="login()">Login</button>
+                            </div>
+
+                        </form>
+
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12 bg-dark" style="padding: 5px;">
+
+                    </div>
+                </div>
+
+                <div class="row" ng-show="true == displayflags.newContainerForm">
+                    <div id="loginform" class="col-10 container-fluid bg-light" style=" padding:10px; text-align: center; height: 100%;">
+                        
+                        <form method="post">
+                                <table>
+                                    <tbody>
+                                    <tr><td><h5> Create New Container </h5> </td></tr>
+                                    <tr>
+                                        <td><label for="cname"><b>Container Name</b></label></td>
+                                        <td><input id="cname" type="text" placeholder="Container Name" name="cname" required style="width: 100%;"> </td>
+                                    </tr>
+                                    
+                                    <tr>
+                                        <td><label for="psw1"><b>Description</b></label></td>
+                                        <td><input id="cdescription" type="text" placeholder="Short description" name="psw1" required style="width: 100%;"></td>
+
+                                    </tr>
+                                    <!--
+                                    <tr>
+                                        <td><label for="psw2"><b>Container Size</b></label></td>
+                                        <td><input id="csize" type="text" placeholder="Max Size of container in TB" name="psw2" required> 
+                                        <select name="containers" id="size" (change)="onChange($event.target.value)" >
+                                          <option disabled selected value> - </option>
+                                          <option value="GB">GB</option>
+                                          <option value="TB">TB</option>
+                                          <option value="PB">PB</option>
+                                        </select> </td>
+                                    </tr>
+                                    -->
+                                    <tr>
+                                        <td><label for="uname1"><b>Add username</b></label></td>
+                                        <td><input id="uname111" type="text" placeholder="Create a new username and password for this container" name="uname1" required style="width: 100%;"> </td>
+                                    </tr>
+                                    
+                                    <tr>
+                                        <td><label for="psw6"><b>Password</b></label></td>
+                                        <td><input id="upassword111" type="text" placeholder="Create a password as well" name="psw6" required style="width: 100%;"></td>
+
+                                    </tr>
+                                    <tr><td></td><td><button type="submit" ng-click="CreateContainer()">Create New Container</button></td></tr>
+                                    </tbody>
+                                </table>
+                        </form>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12 bg-dark" style="padding: 5px;">
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
+
+

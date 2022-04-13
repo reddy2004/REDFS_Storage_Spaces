@@ -1,0 +1,16 @@
+﻿Notes
+
+when file is reading a raid group, read all the stripe into memory. Even if one block is written, then dirty
+all the dbns, so that it can be writtin out again as a stripe. This also means dedupe should be aware of stripe
+logic and make sure that the dbns of any stripe would have the same refcount/childrefcount.
+
+dbns in a stripe can have refcount as 0. Remember, we have wafl style write, so we know for sure that the stripe
+is written only once, so there is no problem as long as the blocks are not modified. This will however be an issue
+because lets say we have refcounts of [0,2,3,2] for a stripe. We have a block free, this is called a stripe-hole.
+The stripe hole can only filled by background scanners, wich we are offline.
+** If we have [0,1,0,2], and we allow live writes, then we could have one file writing to block 0 and another file
+trying to write to the third block creating race conditions.
+
+
+is wip.iohistory required to be checked in fast_read and fast_write.?
+Can we reset it when we clean the wip.?
