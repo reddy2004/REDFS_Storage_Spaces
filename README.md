@@ -7,3 +7,8 @@ With REDFS, you start with a template volume called the Zero Volume. A zero volu
 
 
 ![alt text](https://github.com/reddy2004/REDFS_Storage_Spaces/blob/main/REDFS_Storage_Spaces/Data/Screenshots/tree_view.png)
+
+In the webview, clicking on any of the node in the tree shows you the operations that are allowed on the node. Please see the dialog below.
+
+
+![alt text](https://github.com/reddy2004/REDFS_Storage_Spaces/blob/main/REDFS_Storage_Spaces/Data/Screenshots/vol_options.png)
