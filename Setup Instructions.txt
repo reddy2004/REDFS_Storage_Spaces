@@ -1,0 +1,9 @@
+The working directory for REDFS is your "Documents" folder
+Ex.C:\Users\Vikrama\Documents\
+
+Please copy REDFS_Storage_Spaces\Data\WebUIAssets to "Documents\Global" folder
+
+Run the program and connect to http://localhost:8000/config from your browser
+
+This is not a working FS yet, I'm in the process of porting the FS logic from
+https://github.com/reddy2004/RedFS-Windows-Filesystem to here.
