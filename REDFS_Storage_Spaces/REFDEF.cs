@@ -391,6 +391,8 @@ namespace REDFS_ClusterMode
         public bool is_dirty;
         public int m_rbn;
 
+        public int m_unique_id;
+
         public WRBuf(int r)
         {
             DEFS.ASSERT(OPS.REF_INDEX_SIZE == 8, "Incorrect ref_cnt entry size defined, We support only 8 byte entry");
@@ -418,12 +420,16 @@ namespace REDFS_ClusterMode
             return true;
         }
 
-        public void reinit(int r)
+        public void reinit(int r, int unique_id)
         {
             DEFS.ASSERT(OPS.REF_INDEX_SIZE == 8, "Incorrect ref_cnt entry size defined, We support only 8 byte entry");
             m_rbn = r;
             start_dbn = r * OPS.REF_INDEXES_IN_BLOCK;
             m_creation_time = DateTime.Now.ToUniversalTime().Ticks;
+            Array.Clear(data, 0, data.Length);
+            m_unique_id = unique_id;
+
+
         }
 
         public int get_buf_age()
@@ -465,7 +471,7 @@ namespace REDFS_ClusterMode
                 DEFS.ASSERT(dbn >= start_dbn && dbn < start_dbn + OPS.REF_INDEXES_IN_BLOCK,
                     "Wrong dbn range in VBuf 3" + dbn + "," +
                     start_dbn + "," + m_rbn);
-
+                
                 byte[] val = BitConverter.GetBytes((Int16)value);
                 data[offset] = val[0];
                 data[offset + 1] = val[1];
@@ -503,6 +509,7 @@ namespace REDFS_ClusterMode
 
         public bool get_dedupe_overwritten_flag(long dbn)
         {
+            /* seems to be overwriting child refcnt
             lock (data)
             {
                 int offset = (int)((dbn % OPS.REF_INDEXES_IN_BLOCK) * OPS.REF_INDEX_SIZE + 6);
@@ -510,16 +517,20 @@ namespace REDFS_ClusterMode
                 if ((bvale & 0x01) != 0) return true;
                 return false;
             }
+            */
+            return false;
         }
 
         public void set_dedupe_overwritten_flag(long dbn, bool flag)
         {
+            /*seems to be overwriting child refcnt
             lock (data)
             {
                 int offset = (int)((dbn % OPS.REF_INDEXES_IN_BLOCK) * OPS.REF_INDEX_SIZE + 6);
                 data[offset] = (flag) ? ((byte)(data[offset] | 0x01)) : (byte)(data[offset] & 0xFE);
                 is_dirty = true;
             }
+            */
         }
     }
 

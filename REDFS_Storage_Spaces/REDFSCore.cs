@@ -599,6 +599,8 @@ namespace REDFS_ClusterMode
                 redfs_shrink_wip_internal(wip.get_filefsid(), wip, newsize);
             }
             
+            //XXX todo : Dont have to write out just allocated L0 since they will be overwritten anyway.
+            //Try to write out L1 & L2s instead
             sync(wip);
             flush_cache(wip, true);
         }
@@ -756,6 +758,11 @@ namespace REDFS_ClusterMode
             }
         }
 
+        public RedFS_Inode redfs_clone_wip(RedFS_Inode wip)
+        {
+            return redfs_clone_file_wip(wip);
+        }
+
         /**************************************************  Private methods *************************************/
 
         //
@@ -904,7 +911,7 @@ namespace REDFS_ClusterMode
             Console.WriteLine("do_fast_read : " + dbn0);
             redFSPersistantStorage.ExecuteReadPlanSingle(rpe, buffer, offset, OPS.FS_BLOCK_SIZE);
 
-            wip.log("Fast Read " + fbn + "(buffer size,offset =" + buffer.Length + "," + offset + ")");
+            wip.log("Fast Read " + dbn0 + "(buffer size,offset =" + buffer.Length + "," + offset + ")");
         }
 
         //does not work correctly yet, but very fast > 60 Mbps
@@ -914,23 +921,45 @@ namespace REDFS_ClusterMode
 
             RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(wip, 1, fbn, true);
 
+            if (wbl1.m_dbn != 0)
+            {
+                redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wbl1.m_dbn);
+            }
+
+            //if (wbl1.m_dbn == 0)
+            //{
+                wbl1.m_dbn = redfsBlockAllocator.allocateDBN(wip.get_filefsid(), wip.spanType);
+                wbl1.is_dirty = true;
+
+                if (wip.get_inode_level() == 1)
+                {
+                    int pidx = wbl1.myidx_in_myparent();
+                    wip.set_child_dbn(pidx, wbl1.m_dbn);
+                }
+                else if (wip.get_inode_level() == 2)
+                {
+                    RedBufL2 wbl2 = (RedBufL2)redfs_load_buf(wip, 2, fbn, true);
+                    wbl2.set_child_dbn(OPS.myidx_in_myparent(1, fbn), wbl1.m_dbn);
+                }
+            //}
+
             int idx = OPS.myidx_in_myparent(0, fbn);
             long dbn0 = wbl1.get_child_dbn(idx);
 
-            if (dbn0 != 0 || dbn0 != DBN.INVALID)
+            if (dbn0 != 0 && dbn0 != DBN.INVALID)
             {
                 redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbn0);
             }
 
-            redfs_allocate_new_dbntree(wip, null, fbn);
+            //redfs_allocate_new_dbntree(wip, null, fbn);
             dbn0 = redfsBlockAllocator.allocateDBN(wip.get_filefsid(), wip.spanType);
 
-            redfsBlockAllocator.increment_refcount_onalloc(wip.get_filefsid(), dbn0);
+            //redfsBlockAllocator.increment_refcount_onalloc(wip.get_filefsid(), dbn0);
 
             wbl1.set_child_dbn(idx, dbn0);
 
             WritePlanElement wpe = redfsBlockAllocator.PrepareWritePlanSingle(dbn0);
-            redFSPersistantStorage.ExecuteWritePlanSingle(wpe, wip, buffer);
+            redFSPersistantStorage.ExecuteWritePlanSingle(wpe, buffer, offset);
 
             wip.log("Fast Write " + fbn + "(buffer size,offset =" + buffer.Length + "," + offset + ")");
         }
@@ -948,10 +977,14 @@ namespace REDFS_ClusterMode
             }
             long newdbn = redfsBlockAllocator.allocateDBN(wip.get_filefsid(), wip.spanType);
 
+            DEFS.ASSERT(newdbn != wb.get_ondisk_dbn(), "We really have to alloc a new dbn");
+
             REDFS_BUFFER_ENCAPSULATED wbe = new REDFS_BUFFER_ENCAPSULATED(wb);
             wbe.set_dbn(newdbn);
             wb.set_dbn_reassignment_flag(false);
-            redfsBlockAllocator.increment_refcount_onalloc(wip.get_filefsid(), newdbn);
+
+            //causing re-allocs to go from refcount 0->1 to 2
+            //redfsBlockAllocator.increment_refcount_onalloc(wip.get_filefsid(), newdbn);
         }
 
         /*
@@ -1068,6 +1101,11 @@ namespace REDFS_ClusterMode
                 // Do dummy read if the write is a full write 
                 long fbn = OPS.OffsetToFBN(fileoffset);
 
+                if (fbn >= 1023)
+                {
+                    Console.WriteLine("wait...");
+
+                }
                 bool fullwrite = (copylength == OPS.FS_BLOCK_SIZE && type == REDFS_OP.REDFS_WRITE &&
                         wip.get_wiptype() != WIP_TYPE.PUBLIC_INODE_FILE) ? true : false;
                 bool fullread = (copylength == OPS.FS_BLOCK_SIZE && type == REDFS_OP.REDFS_READ &&
@@ -1160,10 +1198,25 @@ namespace REDFS_ClusterMode
             return do_io_internal(REDFS_OP.REDFS_READ, wip, fileoffset, buffer, boffset, blength);
         }
 
-        public void redfs_do_raw_read_block(long dbn, byte[] buffer)
+        public void redfs_do_raw_read_block(long dbn, byte[] buffer, int offset)
         {
+            byte[] blockbuff = new byte[OPS.FS_BLOCK_SIZE];
+
             ReadPlanElement rpe = redfsBlockAllocator.PrepareReadPlanSingle(dbn);
-            redFSPersistantStorage.ExecuteReadPlanSingle(rpe, buffer, 0, OPS.FS_BLOCK_SIZE);
+            redFSPersistantStorage.ExecuteReadPlanSingle(rpe, blockbuff, 0, OPS.FS_BLOCK_SIZE);
+
+            for (int i=0;i<OPS.FS_BLOCK_SIZE;i++)
+            {
+                buffer[offset + i] = blockbuff[i];
+            }
+        }
+
+        public void redfs_do_raw_write_block(long dbn, byte[] buffer, int offset)
+        {
+
+            WritePlanElement wpe = redfsBlockAllocator.PrepareWritePlanSingle(dbn);
+            redFSPersistantStorage.ExecuteWritePlanSingle(wpe, buffer, offset);
+
         }
 
         public void sync(RedFS_Inode wip)

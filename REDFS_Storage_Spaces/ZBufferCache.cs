@@ -10,9 +10,6 @@ namespace REDFS_ClusterMode
         private RedBufL0[] iStack = new RedBufL0[1024 * 16 * 4];
         private int iStackTop = 0;
 
-        IDictionary<int, RedBufL0> tracker = new Dictionary<int, RedBufL0>();
-
-        List<string> msgs = new List<string>();
         public ZBufferCache()
         {
 
@@ -21,10 +18,6 @@ namespace REDFS_ClusterMode
         public int GetZBufferUsageInMB()
         {
             return 4 * (iStack.Length - iStackTop) / 1024;
-        }
-        public int getUsedZBufferCacheInMB()
-        {
-            return 4 * ((iStack.Length - iStackTop) / 1024);
         }
 
         public void init()
@@ -56,10 +49,8 @@ namespace REDFS_ClusterMode
 
                 wb.tracker = iStackTop;
                 wb.trackermsg = msg;
-                //tracker.Add(iStackTop, wb);
                 iStackTop--;
                 wb.reinitbuf(sf);
-                msgs.Add("(+ " + wb.tracker +  " ) : " + msg + " (" + (iStackTop + 1) + " to " + iStackTop + ")");
                 return wb;
             }
         }
@@ -76,8 +67,6 @@ namespace REDFS_ClusterMode
         {
             lock (iStack)
             {
-                //tracker.Remove(wb.tracker);
-                msgs.Add("(- " + wb.tracker + ") : " + msg + " (" + iStackTop + " to " + (iStackTop+1) + ")");
                 iStackTop++;
                 iStack[iStackTop] = wb;
             }

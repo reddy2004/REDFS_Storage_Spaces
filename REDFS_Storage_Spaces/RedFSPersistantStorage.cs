@@ -314,13 +314,13 @@ namespace REDFS_ClusterMode
             wb.set_dirty(false);
         }
 
-        public void ExecuteWritePlanSingle(WritePlanElement r, RedFS_Inode wip, byte[] buffer)
+        public void ExecuteWritePlanSingle(WritePlanElement r, byte[] buffer, int bufferOffset)
         {
             ChunkFileStorage cfs1 = (ChunkFileStorage)chunkFileHandles[r.dataChunkIds[0]];
             DEFS.ASSERT(cfs1 != null, "Chunk must exist");
             lock (cfs1)
             {
-                cfs1.Write(buffer, r.writeOffsets[0], 0, buffer.Length);
+                cfs1.Write(buffer, r.writeOffsets[0], bufferOffset, OPS.FS_BLOCK_SIZE);
             }
 
             if (r.dataChunkIds.Length == 2)
@@ -329,7 +329,7 @@ namespace REDFS_ClusterMode
                 DEFS.ASSERT(cfs2 != null, "Chunk must exist");
                 lock (cfs2)
                 {
-                    cfs2.Write(buffer, r.writeOffsets[0], 0, buffer.Length);
+                    cfs2.Write(buffer, r.writeOffsets[0], bufferOffset, OPS.FS_BLOCK_SIZE);
                 }
             }
         }

@@ -16,6 +16,8 @@ namespace REDFS_ClusterMode
         private FileStream tfile0 = null; /* temp file used to store /rather queue ops */
         private int tfilefbn = 0;
 
+        Random ridGen = new Random();
+
         /*
          * Stack and cache management.
          */
@@ -27,6 +29,8 @@ namespace REDFS_ClusterMode
         private byte[] tmpiodatatfileR = new byte[OPS.FS_BLOCK_SIZE];
         private byte[] tmpiodatatfileW = new byte[OPS.FS_BLOCK_SIZE];
         private byte[] tmpsnapshotcache = new byte[OPS.FS_BLOCK_SIZE];
+
+        List<string> msgs = new List<string>();
 
         public void init()
         {
@@ -61,12 +65,10 @@ namespace REDFS_ClusterMode
 
         public void shut_down()
         {
-            //DEFS.DEBUG("SHUTDOWN", "Calling WRLoader() shut down");
             UpdateReqI r = new UpdateReqI();
             r.optype = REFCNT_OP.SHUT_DOWN;
             GLOBALQ.m_reqi_queue.Add(r);
             while (r.processed == false) Thread.Sleep(100);
-            //DEFS.DEBUG("SHUTDOWN", "Finishing WRLoader() shut down");
         }
 
         private void printspeed()
@@ -119,7 +121,7 @@ namespace REDFS_ClusterMode
             {
                 WRBuf wb = iStack[iStackTop];
                 iStackTop--;
-                wb.reinit(r);
+                wb.reinit(r, ridGen.Next());
                 return wb;
             }
         }
@@ -140,10 +142,6 @@ namespace REDFS_ClusterMode
         private void sync_buf(int rbn)
         {
             long offset = OPS.REF_BLOCK_SIZE * (long)(rbn);
-
-
-            //fuck
-            //OPS.Encrypt_Data_ForWrite(tmpiodata, GLOBALQ.WRObj[rbn].incoretbuf.data);
 
             mfile1.Seek(offset, SeekOrigin.Begin);
             mfile1.Write(GLOBALQ.WRObj[rbn].incoretbuf.data, 0, OPS.REF_BLOCK_SIZE);
@@ -221,9 +219,6 @@ namespace REDFS_ClusterMode
 
                 mfile1.Seek((long)rbn * OPS.REF_BLOCK_SIZE, SeekOrigin.Begin);
                 mfile1.Read(tbuf.data, 0, OPS.REF_BLOCK_SIZE);
-
-                //fuck
-                //OPS.Decrypt_Read_WRBuf(tmpiodata, tbuf.data);
 
                 GLOBALQ.WRObj[rbn].incoretbuf = tbuf;
                 refcache[cachesize++] = tbuf;
@@ -341,6 +336,7 @@ namespace REDFS_ClusterMode
             int curr = GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(dbn);
             GLOBALQ.WRObj[rbn].incoretbuf.set_refcount(dbn, curr + value);
 
+
             if (optype == REFCNT_OP.INCREMENT_REFCOUNT_ALLOC ||
                 optype == REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC)
             {
@@ -355,6 +351,9 @@ namespace REDFS_ClusterMode
                     int currchd = GLOBALQ.WRObj[rbn].incoretbuf.get_childcount(dbn);
                     GLOBALQ.WRObj[rbn].incoretbuf.set_childcount(dbn, currchd + value);
                     //DEFS.DEBUGCLR("/-0-0-/", "dbn,  " + dbn + "(" + curr + "->" + (curr + value) + ") (" + currchd + "->" + (currchd + value) + ")");
+
+                    int currchd_verify = GLOBALQ.WRObj[rbn].incoretbuf.get_childcount(dbn);
+                    DEFS.ASSERT((currchd + value) == currchd_verify, "Child refcount not writting out correctly!");
                 }
             }
         }
@@ -368,8 +367,6 @@ namespace REDFS_ClusterMode
                 tfile0.Seek((long)cu.tfbn * OPS.FS_BLOCK_SIZE, SeekOrigin.Begin);
                 tfile0.Read(tmpiodatatfileR, 0, OPS.FS_BLOCK_SIZE);
                 OPS.Decrypt_Read_WRBuf(tmpiodatatfileR, buffer);
-                //DEFS.DEBUG("ENCY", "READ inoLo : " + OPS.ChecksumPageWRLoader(buffer));
-                //DEFS.DEBUG("CNTR", "do_inode_refupdate_work (" + cu.tfbn + ") childcnt =" + childcnt);
             }
 
            
@@ -415,7 +412,6 @@ namespace REDFS_ClusterMode
                     apply_update_internal(dbn, type, childcnt, cu.optype, true);
                 }
             }
-            //OPS.dump_inoL0_wips(buffer);
         }
 
         private void do_regular_dirORfile_work(UpdateReqI cu, int childcnt)
@@ -428,8 +424,6 @@ namespace REDFS_ClusterMode
                 tfile0.Seek((long)cu.tfbn * OPS.FS_BLOCK_SIZE, SeekOrigin.Begin);
                 tfile0.Read(tmpiodatatfileR, 0, OPS.FS_BLOCK_SIZE);
                 OPS.Decrypt_Read_WRBuf(tmpiodatatfileR, buffer);
-                //DEFS.DEBUG("ENCY", "READ RF : " + OPS.ChecksumPageWRLoader(buffer));
-                //DEFS.DEBUG("CNTR", "do_regular_dirORfile_work (" + cu.tfbn + ") childcnt =" + childcnt);
             }
 
             wb.data_to_buf(buffer);
@@ -699,7 +693,6 @@ namespace REDFS_ClusterMode
 
             while (r.processed == false)
             {
-                //Console.WriteLine("Waiting for refcount to turn up : " + dbn + "," + GLOBALQ.m_reqi_queue.Count);
                 Thread.Sleep(10);
             }
             refcnt = GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(dbn);
@@ -716,7 +709,6 @@ namespace REDFS_ClusterMode
             }
             else
             {
-                //DEFS.DEBUG("-REF-", "CTH refcount for dbn = " + wb.get_ondisk_dbn() + " inofile = " + isinodefilel0);
                 wb.set_touchrefcnt_needed(false);
             }
 
@@ -773,7 +765,6 @@ namespace REDFS_ClusterMode
                     OPS.Encrypt_Data_ForWrite(tmpiodatatfileW, wb.buf_to_data());
                     tfile0.Seek((long)tfilefbn * OPS.FS_BLOCK_SIZE, SeekOrigin.Begin);
                     tfile0.Write(tmpiodatatfileW, 0, OPS.FS_BLOCK_SIZE);
-                    //DEFS.DEBUG("ENCY", "Wrote : " + OPS.ChecksumPageWRLoader(wb.buf_to_data()));
                     r.tfbn = tfilefbn;
                     tfilefbn++;
                 }

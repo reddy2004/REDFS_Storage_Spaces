@@ -11,7 +11,7 @@ namespace REDFS_TESTS
     /*
      * Test classes will introduce a way to start using REDFS as a filesystem/storage layer
      * for your own application.
-     */ 
+     */
     [TestClass]
     public class IntroTestWIPCreation
     {
@@ -24,7 +24,7 @@ namespace REDFS_TESTS
          * 
          * Currently is designed for usage with Microsoft windows path, but you could modify the
          * FS to be run on unix devices as well.
-         */ 
+         */
         private void InitNewTestContainer(out string containerName)
         {
             ContainerObject co1 = new ContainerObject();
@@ -60,7 +60,7 @@ namespace REDFS_TESTS
          * DEFAULT, RAID or mirrored. 
          * 
          * In this example, we use the 2GB chunk to map 2 1GB segments into the DBN address space.
-         */ 
+         */
         private void CreateTestContainer(string containerName)
         {
             ChunkInfo ci = new ChunkInfo();
@@ -129,7 +129,7 @@ namespace REDFS_TESTS
          * Create a new container and clone the root volume.
          * In the new volume, i.e FSID 1, create a file.
          * Write out random bytes and read it back and verify its right.
-         */ 
+         */
         [TestMethod]
         public void IntroTest_1()
         {
@@ -170,12 +170,12 @@ namespace REDFS_TESTS
              * We dont care that data is written out correctly or flushed. A background thread flushes all dirty buffers
              * to disk. The wrapper ensures that we read what we just wrote. it does  not matter to the caller if the data is
              * in memory or disk.
-             */ 
+             */
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].ReadFile("\\temp.dat", buffer_out, out bytesRead, 0);
 
             Assert.AreEqual(bytesRead, 99999);
 
-            for (int i=0;i<99999; i++)
+            for (int i = 0; i < 99999; i++)
             {
                 Assert.AreEqual(buffer_in[i], buffer_out[i]);
             }
@@ -184,7 +184,7 @@ namespace REDFS_TESTS
              * We also dont need to flush the buffers or clear out alloc'd blocks of the file. Since the tree is automanaged, we
              * can just call cleanup or unmount the container and expect that all data is written out cleanly and we manually
              * dont have to worry about any sort of memory management
-             */ 
+             */
             CleanupTestContainer(containerName);
         }
 
@@ -202,7 +202,10 @@ namespace REDFS_TESTS
          * 
          * To impliment something else, say a block store, then you need to create an inodeFile to store inodes in your blockstore. another
          * hashFile to store hash id to inode mapping. Then store both inodeFile and hashFile somewhere to access all the files in the block store.
-         */ 
+         * 
+         * In the below test, we create an inode and verify read/write and we have the correct block allocation. then we clone this wip and
+         * verify that its exactly the same as the source wip.
+         */
         [TestMethod]
         public void IntroTest_2()
         {
@@ -215,14 +218,15 @@ namespace REDFS_TESTS
 
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
 
-            REDFSCore rfcore= REDFS.redfsContainer.ifsd_mux.redfsCore;
+            REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
             int newInodeNum = rfcore.NEXT_INODE_NUMBER(rfsid);
 
             RedFS_Inode myWIP = new RedFS_Inode(WIP_TYPE.REGULAR_FILE, newInodeNum, 0);
 
+            int dataSize = 80000;
 
-            byte[] buffer_in = new byte[99999];
-            byte[] buffer_out = new byte[99999];
+            byte[] buffer_in = new byte[dataSize];
+            byte[] buffer_out = new byte[dataSize];
 
             Random r = new Random();
             r.NextBytes(buffer_in);
@@ -232,19 +236,19 @@ namespace REDFS_TESTS
              * Use the wip to write out some data to disk. You could write out any arbitrary data encoded to byte array. 
              * For ex. Im using a simple json to store the directory info and writing out the json->byte array for the dir wip in the project
              */
-            rfcore.redfs_write(myWIP, 0, buffer_in, 0, 99999);
+            rfcore.redfs_write(myWIP, 0, buffer_in, 0, dataSize);
 
             /*
              * Read directly using the REDFSCore.
              */
-            rfcore.redfs_read(myWIP, 0, buffer_out, 0, 99999);
+            rfcore.redfs_read(myWIP, 0, buffer_out, 0, dataSize);
 
-            for (int i = 0; i < 99999; i++)
+            for (int i = 0; i < dataSize; i++)
             {
                 Assert.AreEqual(buffer_in[i], buffer_out[i]);
             }
 
-            
+
             /*
              * Since we are working with wips directly, we have to free up the allocated memory.
              */
@@ -252,10 +256,25 @@ namespace REDFS_TESTS
 
             PrintableWIP pwip = rfcore.redfs_list_tree(myWIP);
 
-            Assert.AreEqual(pwip.wipIdx.Length, 13); //13 blocks
+            Assert.AreEqual(pwip.wipIdx.Length, 10); //10 blocks
             Assert.AreEqual(pwip.L0_DBNS, null); //coz all dbns are stored in wip itself
             Assert.AreEqual(pwip.L1_DBNS, null);
 
+            /*
+             * Now lets check refcounts of these blocks
+             */
+
+            for (int i = 0; i < pwip.wipIdx.Length; i++)
+            {
+                long dbn = pwip.wipIdx[i];
+                int refcnt = 0, childrefcnt = 0;
+                rfcore.redfsBlockAllocator.GetRefcounts(dbn, ref refcnt, ref childrefcnt);
+
+                Assert.AreEqual(1, refcnt);
+                Assert.AreEqual(0, childrefcnt);
+            }
+
+            Console.WriteLine("comparision completed!");
             /*
              * Usually using REDFS_Tree to access wips would have taken care of this, but since we are working
              * with direct wips and REDFSCore, we should discard the wip once done.
@@ -265,8 +284,328 @@ namespace REDFS_TESTS
              * would be two copies. Data will get garbled if you use both.
              * 
              * Always checkout a wip, do i/o, then sync, commit and discard it
-             */ 
+             */
             rfcore.redfs_discard_wip(myWIP);
+
+            /*
+             * Now lets get the same wip we wrote to recently and clone it. Notice that this is not a part of
+             * the inode file as we have no reference to inode file (inonum = 0). inode file is also a regular
+             * file as far as RedfsCore is concerned and inode file itself is stored in the fsid.
+             */
+            int cloneInodeNum = rfcore.NEXT_INODE_NUMBER(rfsid);
+
+            RedFS_Inode myWIP_t = myWIP; //since we have not stored it anywhere
+
+            RedFS_Inode myWIP_c = rfcore.redfs_clone_wip(myWIP_t);
+
+            r.NextBytes(buffer_out);
+
+            rfcore.redfs_read(myWIP_c, 0, buffer_out, 0, buffer_out.Length);
+
+            for (int i = 0; i < dataSize; i++)
+            {
+                Assert.AreEqual(buffer_in[i], buffer_out[i]);
+            }
+
+            rfcore.sync(myWIP_c);
+
+            PrintableWIP pwip_c = rfcore.redfs_list_tree(myWIP_c);
+
+            Assert.AreEqual(pwip_c.wipIdx.Length, 10); //10 blocks
+            Assert.AreEqual(pwip_c.L0_DBNS, null); //coz all dbns are stored in wip itself
+            Assert.AreEqual(pwip_c.L1_DBNS, null);
+
+            /*
+             * Now lets check refcounts of these blocks in cloned file
+             */
+
+            for (int i = 0; i < pwip_c.wipIdx.Length; i++)
+            {
+                long dbn = pwip.wipIdx[i];
+                long dbn_c = pwip_c.wipIdx[i];
+
+                int refcnt = 0, childrefcnt = 0;
+                rfcore.redfsBlockAllocator.GetRefcounts(dbn_c, ref refcnt, ref childrefcnt);
+
+                Assert.AreEqual(2, refcnt);   //should be 2
+                Assert.AreEqual(0, childrefcnt);
+
+                Assert.AreEqual(dbn, dbn_c); //should be same as its a clone
+            }
+
+            rfcore.redfs_discard_wip(myWIP_t);
+            rfcore.redfs_discard_wip(myWIP_c);
+
+            CleanupTestContainer(containerName);
+        }
+
+        /*
+         * In this test, we test clone of L0 file, i.e L0s are present in the wip itself
+         */ 
+        [TestMethod]
+        public void IntroTest_3()
+        {
+            string containerName;
+            InitNewTestContainer(out containerName);
+
+            CreateTestContainer(containerName);
+
+            CreateCloneOfZeroVolume();
+
+            RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
+
+            REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
+
+            int dataSize = 1024 * 1024; //9MB XXX todo this fails after 64 blocks. i.e > 512K
+
+            byte[] buffer_in = new byte[dataSize];
+            byte[] buffer_out = new byte[dataSize];
+            byte[] buffer_raw_read = new byte[dataSize];
+
+            Random r = new Random();
+            r.NextBytes(buffer_in);
+            r.NextBytes(buffer_out); //just scramble it, it should be overritten with buffer_in's data when we read back.
+
+            int newInodeNum = rfcore.NEXT_INODE_NUMBER(rfsid);
+
+            RedFS_Inode myWIP = new RedFS_Inode(WIP_TYPE.REGULAR_FILE, newInodeNum, 0);
+            /*
+             * Use the wip to write out some data to disk. You could write out any arbitrary data encoded to byte array. 
+             */
+            rfcore.redfs_write(myWIP, 0, buffer_in, 0, dataSize);
+
+            rfcore.sync(myWIP);
+            rfcore.flush_cache(myWIP, false);
+
+            RedFS_Inode myWIP_clone = rfcore.redfs_clone_wip(myWIP);
+
+            PrintableWIP pwip_0 = rfcore.redfs_list_tree(myWIP_clone);
+
+            int refcntL1 = 0, childrefcntL1 = 0;
+            rfcore.redfsBlockAllocator.GetRefcounts(pwip_0.wipIdx[0], ref refcntL1, ref childrefcntL1);
+            Assert.AreEqual(2, refcntL1);
+            Assert.AreEqual(0, childrefcntL1); //we have already touched L1, so child counts L0's will be ref=2 as well as the L1 with ref=2
+
+            for (int i = 0; i < pwip_0.L0_DBNS.Length; i++)
+            {
+                long dbn = pwip_0.L0_DBNS[i];
+                int refcnt = 0, childrefcnt = 0;
+                rfcore.redfsBlockAllocator.GetRefcounts(dbn, ref refcnt, ref childrefcnt);
+                Assert.AreEqual(2, refcnt);
+                Assert.AreEqual(0, childrefcnt); //Should be 0 for L0
+            }
+
+            rfcore.redfs_write(myWIP_clone, 0, buffer_in, 0, OPS.FS_BLOCK_SIZE);
+            rfcore.sync(myWIP_clone);
+            rfcore.flush_cache(myWIP_clone, false);
+
+           
+
+            PrintableWIP pwip_1 = rfcore.redfs_list_tree(myWIP_clone);
+
+            int refcntL1a = 0, childrefcntL1a = 0;
+            rfcore.redfsBlockAllocator.GetRefcounts(pwip_1.wipIdx[0], ref refcntL1a, ref childrefcntL1a);
+            Assert.AreEqual(1, refcntL1a); //Notice L1s ref is now 1 since it was cow'd when we wrote fbn 0
+            Assert.AreEqual(0, childrefcntL1a);
+
+            for (int i = 0; i < pwip_1.L0_DBNS.Length; i++)
+            {
+                long dbn = pwip_1.L0_DBNS[i];
+                int refcnt = 0, childrefcnt = 0;
+                rfcore.redfsBlockAllocator.GetRefcounts(dbn, ref refcnt, ref childrefcnt);
+
+                if (i == 0)
+                {
+                    Assert.AreEqual(1, refcnt);
+                }
+                else
+                {
+                    Assert.AreEqual(2, refcnt);
+                }
+                Assert.AreEqual(0, childrefcnt); //Should be 0 for L0
+            }
+
+            rfcore.redfs_discard_wip(myWIP);
+
+            CleanupTestContainer(containerName);
+        }
+
+
+        /*
+        * We proceed to a slightly more complex test.
+        * Create a wip which has L1s, i.e greater than 8MB file
+        * Do multiple clones of the file, verify the blocks and refcounts
+        * Overwrite one file and verify COW is working as expected.
+        */
+
+            [TestMethod]
+        public void IntroTest_4()
+        {
+            string containerName;
+            InitNewTestContainer(out containerName);
+
+            CreateTestContainer(containerName);
+
+            CreateCloneOfZeroVolume();
+
+            RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
+
+            REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
+
+            int dataSize = 1024 * 1024 * 9; //9MB
+
+            byte[] buffer_in = new byte[dataSize];
+            byte[] buffer_out = new byte[dataSize];
+            byte[] buffer_raw_read = new byte[dataSize];
+
+            Random r = new Random();
+            r.NextBytes(buffer_in);
+            r.NextBytes(buffer_out); //just scramble it, it should be overritten with buffer_in's data when we read back.
+
+            int numClones = 10;
+
+            int newInodeNum = rfcore.NEXT_INODE_NUMBER(rfsid);
+
+            RedFS_Inode myWIP = new RedFS_Inode(WIP_TYPE.REGULAR_FILE, newInodeNum, 0);
+
+
+            /*
+             * Use the wip to write out some data to disk. You could write out any arbitrary data encoded to byte array. 
+             */
+            rfcore.redfs_write(myWIP, 0, buffer_in, 0, dataSize);
+
+            rfcore.sync(myWIP);
+            rfcore.flush_cache(myWIP, false);
+
+            /*
+             * Wip being cloned must nnot be dirty and should have no incore buffers
+            */
+            RedFS_Inode[] clones = new RedFS_Inode[numClones];
+
+            for (int cloneid = 0; cloneid < numClones; cloneid++)
+            {
+                clones[cloneid] = rfcore.redfs_clone_wip(myWIP);
+                rfcore.flush_cache(myWIP, false);
+            }
+
+            PrintableWIP pwip_0 = rfcore.redfs_list_tree(clones[0]); //One of the clones
+            PrintableWIP pwip_1 = rfcore.redfs_list_tree(clones[1]);
+
+            Assert.AreEqual(pwip_0.wipIdx.Length, 2); //2 L1 blocks
+            Assert.AreEqual(pwip_0.L0_DBNS.Length, 1152);
+            Assert.AreEqual(pwip_0.L1_DBNS, null);//coz all L1 dbns are stored in wip itself
+
+            Assert.AreEqual(pwip_1.wipIdx.Length, 2); //2 L1 blocks
+            Assert.AreEqual(pwip_1.L0_DBNS.Length, 1152);
+            Assert.AreEqual(pwip_1.L1_DBNS, null);//coz all L1 dbns are stored in wip itself
+
+            for (int l0dbn = 0; l0dbn < 1152; l0dbn++)
+            {
+                Assert.AreEqual(pwip_0.L0_DBNS[l0dbn], pwip_1.L0_DBNS[l0dbn]);
+
+                //Also do raw read to verify that blocks are being read correctly.
+                rfcore.redfs_do_raw_read_block(pwip_0.L0_DBNS[l0dbn], buffer_raw_read, l0dbn * OPS.FS_BLOCK_SIZE);
+            }
+
+            /*
+             * verify we can read data too
+             */
+            r.NextBytes(buffer_out); //scrable
+
+            //Just make two reads,, just for fun! with two different clones
+            rfcore.redfs_read(clones[2], 0, buffer_out, 0, buffer_out.Length / 2);
+            rfcore.redfs_read(clones[3], buffer_out.Length / 2, buffer_out, buffer_out.Length / 2, buffer_out.Length / 2);
+
+            int mismatchCount = 0;
+            int firstMismatch = 0;
+            for (int i = 0; i < dataSize; i++)
+            {
+                bool hasMismatch = (buffer_in[i] != buffer_out[i]);
+                if (hasMismatch)
+                {
+                    mismatchCount++;
+                    if (firstMismatch == 0)
+                    {
+                        firstMismatch = i;
+                    }
+                }
+                Assert.AreEqual(buffer_in[i], buffer_out[i]);
+            }
+            Console.WriteLine("has mismatch, count = " + mismatchCount);
+            /*
+             * Now lets check refcounts of these blocks
+             */
+
+            for (int i = 0; i < pwip_1.wipIdx.Length; i++)
+            {
+                long dbn = pwip_1.wipIdx[i];
+                int refcnt = 0, childrefcnt = 0;
+                rfcore.redfsBlockAllocator.GetRefcounts(dbn, ref refcnt, ref childrefcnt);
+
+                Assert.AreEqual(11, refcnt);
+                Assert.AreEqual(0, childrefcnt);
+            }
+
+            /*
+             * Write some junk into clones[9] and verify its gone in correctly.
+             * also check ref counts of other clones
+             */
+            r.NextBytes(buffer_out); //scrable
+            rfcore.redfs_write(clones[9], 0, buffer_out, 0, dataSize);
+
+            rfcore.redfs_read(clones[9], 0, buffer_raw_read, 0, buffer_raw_read.Length);
+
+            for (int i = 0; i < dataSize; i++)
+            {
+                Assert.AreEqual(buffer_out[i], buffer_raw_read[i]);
+            }
+
+            PrintableWIP pwip_2 = rfcore.redfs_list_tree(clones[9]);
+
+            for (int i = 0; i < pwip_2.wipIdx.Length; i++)
+            {
+                long dbn = pwip_2.wipIdx[i];
+
+                long dbn_prev = pwip_1.wipIdx[i]; //from the previous clones
+
+                int refcnt = 0, childrefcnt = 0;
+                rfcore.redfsBlockAllocator.GetRefcounts(dbn, ref refcnt, ref childrefcnt);
+
+                Assert.AreEqual(1, refcnt);
+                Assert.AreEqual(0, childrefcnt);
+
+                rfcore.redfsBlockAllocator.GetRefcounts(dbn_prev, ref refcnt, ref childrefcnt);
+
+                Assert.AreEqual(10, refcnt);
+                Assert.AreEqual(0, childrefcnt);
+            }
+
+            //Now since L1's are touched, the refcounts of the child would have been modified as well
+            for (int i = 0; i < pwip_2.L0_DBNS.Length; i++)
+            {
+                long dbn = pwip_2.L0_DBNS[i];
+                long dbn_prev = pwip_1.L0_DBNS[i];
+
+                int refcnt = 0, childrefcnt = 0;
+                rfcore.redfsBlockAllocator.GetRefcounts(dbn, ref refcnt, ref childrefcnt);
+
+                Assert.AreEqual(1, refcnt);
+                Assert.AreEqual(0, childrefcnt);
+
+                rfcore.redfsBlockAllocator.GetRefcounts(dbn_prev, ref refcnt, ref childrefcnt);
+                Assert.AreEqual(10, refcnt);
+                Assert.AreEqual(0, childrefcnt);
+            }
+                
+
+            rfcore.redfs_discard_wip(myWIP);
+
+            for (int cloneid = 0; cloneid < numClones; cloneid++)
+            {
+                rfcore.sync(clones[cloneid]);
+                rfcore.flush_cache(clones[cloneid], false);
+                rfcore.redfs_discard_wip(clones[cloneid]);
+            }
 
             CleanupTestContainer(containerName);
         }

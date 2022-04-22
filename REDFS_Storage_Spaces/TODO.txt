@@ -14,3 +14,13 @@ trying to write to the third block creating race conditions.
 
 is wip.iohistory required to be checked in fast_read and fast_write.?
 Can we reset it when we clean the wip.?
+
+
+Create a 100 log for tServiceThread for WRLoader.cs
+
+In redfscore - grow wip
+            //XXX todo : Dont have to write out just allocated L0 since they will be overwritten anyway.
+            //Try to write out L1 & L2s instead
+
+
+            when we write 9MB, the second L1 goes missing.
