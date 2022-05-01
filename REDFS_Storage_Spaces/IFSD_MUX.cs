@@ -79,7 +79,7 @@ namespace REDFS_ClusterMode
 
             RedfsVolumeTrees[newFsidId] = new REDFSTree(FSIDList[newFsidId], redfsCore);
 
-            RedfsVolumeTrees[newFsidId].CreateRootDirectoryWip(FSIDList[newFsidId]); //for the rootDir, i.e '\\'
+            RedfsVolumeTrees[newFsidId].CreateRootDirectoryWip(); //for the rootDir, i.e '\\'
 
             //do_fsid_sync_internal(newFsidId); not required
 
@@ -103,7 +103,7 @@ namespace REDFS_ClusterMode
                     {
                         try
                         {
-                            RedfsVolumeTrees[i].SyncTree(FSIDList[i]);
+                            RedfsVolumeTrees[i].SyncTree();
                             if (FSIDList[i].isDirty())
                             {
                                 redfsCore.redFSPersistantStorage.write_fsid(FSIDList[i]);
@@ -209,13 +209,15 @@ namespace REDFS_ClusterMode
                // ((CInode)REDDY.FSIDList[id].rootdir).unmount(true);
             }
 
-            lock (FSIDList[id])
+            DEFS.ASSERT(FSIDList != null, "FSID List cannot be null");
+            DEFS.ASSERT(FSIDList[id] != null, "FSID List at id: " + id + " cannot be null");
+            lock (FSIDList)
             {
                 if (FSIDList[id].isDirty())
                 {
                     RedFS_Inode inowip = FSIDList[id].get_inode_file_wip("GC2");
                     redfsCore.sync(inowip);
-                    redfsCore.flush_cache(inowip, true);
+                    redfsCore.flush_cache(inowip, false);
                     redfsCore.redfs_commit_fsid(FSIDList[id]);
                 }
             }
@@ -238,7 +240,7 @@ namespace REDFS_ClusterMode
                             {
                                 if (i != 0)
                                 {
-                                    RedfsVolumeTrees[i].SyncTree(FSIDList[i]);
+                                    RedfsVolumeTrees[i].SyncTree();
                                 }
                                 //do_fsid_sync_internal(i);
                             }
@@ -261,7 +263,7 @@ namespace REDFS_ClusterMode
                             RedfsVolumeTrees[v.volumeId] = new REDFSTree(FSIDList[v.volumeId], redfsCore);
                             if (v.volumeId != 0)
                             {
-                                RedfsVolumeTrees[v.volumeId].LoadRootDirectory(FSIDList[v.volumeId]);
+                                RedfsVolumeTrees[v.volumeId].LoadRootDirectory();
                             }
                         }
                         catch (Exception e)

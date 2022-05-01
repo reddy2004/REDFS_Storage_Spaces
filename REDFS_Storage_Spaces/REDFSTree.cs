@@ -17,14 +17,8 @@ namespace REDFS_ClusterMode
     {
         IDictionary inodes = new Dictionary<string, REDFSInode>();
         int thisFsid = 0;
-
+        RedFS_FSID fsidLocalCopy = null;
         REDFSCore   redfsCoreLocalCopy = null;                        /* If null, then just operate without storing any real data*/
-
-        public REDFSTree()
-        {
-            //Root of the file system
-            inodes["\\"] = new REDFSInode(true, null, "\\");
-        }
 
         public REDFSTree(RedFS_FSID fsid, REDFSCore rfscore)
         {
@@ -34,18 +28,19 @@ namespace REDFS_ClusterMode
 
             //fsidLocalCopy = fsid;
             redfsCoreLocalCopy = rfscore;
+            fsidLocalCopy = fsid;
 
             RedFS_Inode inowip = fsid.get_inode_file_wip("load");
             DEFS.ASSERT(inowip.get_filesize() == (long)128 * 1024 * 1024 * 1024, "inowip size mismatch " + inowip.get_filesize());
         }
 
-        public void CreateRootDirectoryWip(RedFS_FSID fsid)
+        public void CreateRootDirectoryWip()
         {
             RedFS_Inode wip = new RedFS_Inode(WIP_TYPE.DIRECTORY_FILE, 2, -1);
             wip.set_filesize(0);
             wip.is_dirty = true;
 
-            RedFS_Inode inowip = fsid.get_inode_file_wip("CTreeinit");
+            RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("CTreeinit");
             DEFS.ASSERT(inowip.get_filesize() == (long)128 * 1024 * 1024 * 1024, "inowip size mismatch " + inowip.get_filesize());
             redfsCoreLocalCopy.redfs_checkin_wip(inowip, wip, wip.get_ino()); //just commit some basic wip 
 
@@ -69,10 +64,10 @@ namespace REDFS_ClusterMode
             string result = System.Text.Encoding.UTF8.GetString(buffer);
         }
 
-        public void LoadRootDirectory(RedFS_FSID fsid)
+        public void LoadRootDirectory()
         {
             REDFSInode rootDir = ((REDFSInode)inodes["\\"]);
-            RedFS_Inode inowip = fsid.get_inode_file_wip("load root dir");
+            RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("load root dir");
 
             rootDir.LoadWipForExistingInode(redfsCoreLocalCopy, inowip, 2, -1);
 
@@ -126,30 +121,99 @@ namespace REDFS_ClusterMode
 
         /*
          * Load the directory does the following,
-         * IF directory in not incore - read it from the filesystem and populate the dictionary.
-         * Load all the file name and meta info of this directory and populate the dictionlary
          */
         private Boolean LoadDirectory(string path)
         {
-            if (inodes.Contains(path) || path == "\\")
+            if (inodes.Contains(path))
             {
-                //Load all the files/dir inside this directory in the dictionary and return
-                //XX It could be the case that directory is present but not its children.
+                REDFSInode currDir = (REDFSInode)inodes[path];
+
+                DEFS.ASSERT(currDir.isDirectory() == true, "Cannot call Load Directory for a file");
+
+                if (currDir.isInodeSkeleton)
+                {
+                    DEFS.ASSERT(currDir.isDirectory() == true, "We should be loading a directory and not a file!");
+
+                    /*
+                     * Now that its a skeleton, we have to load all the contents of this dir into inodes[].
+                     * We have all the file/dir names in 'items' list, be do not have their inode numbers and types, so
+                     * we have to load it from disk.
+                     */
+
+                    long dirDataSize = currDir.myWIP.get_filesize();
+                    byte[] buffer = new byte[dirDataSize];
+                    redfsCoreLocalCopy.redfs_read(currDir.myWIP, 0, buffer, 0, buffer.Length);
+
+                    string result = System.Text.Encoding.UTF8.GetString(buffer);
+                    OnDiskDirectoryInfo oddi = JsonConvert.DeserializeObject<OnDiskDirectoryInfo>(result);
+
+                    if (currDir.items.Count == oddi.inodes.Count) {
+                        foreach (OnDiskInodeInfo item in oddi.inodes)
+                        {
+                            DEFS.ASSERT(currDir.items.Contains(item.fileInfo.FileName), "The items <list> in skeleton must be consistent with ondisk data");
+                        }
+                    }
+
+                    foreach (OnDiskInodeInfo item in oddi.inodes)
+                    {
+                        //too weird logic
+                        if (!currDir.items.Contains(item.fileInfo.FileName))
+                        {
+                            currDir.items.Add(item.fileInfo.FileName);
+                        }
+                        if (!inodes.Contains(item.fileInfo.FileName))
+                        {
+                            bool isDirectory = item.fileInfo.Attributes.HasFlag(FileAttributes.Directory);
+                            string fullChildPath = (path == "\\")? ("\\" + item.fileInfo.FileName) : ( path + "\\" + item.fileInfo.FileName);
+                            int ino = item.ino;
+                            inodes[fullChildPath] = new REDFSInode(true, path, item.fileInfo.FileName);
+                            RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("load some skeleton dir");
+                            ((REDFSInode)inodes[fullChildPath]).LoadWipForExistingInode(redfsCoreLocalCopy, inowip, ino, currDir.myWIP.get_ino());
+
+                            if (isDirectory)
+                            {
+                                //One of the loaded directories children are still not incore.
+                                ((REDFSInode)inodes[fullChildPath]).isInodeSkeleton = true;
+                            }
+                        }
+                    }
+                    currDir.isInodeSkeleton = false;
+                }
+                else
+                {
+                    //It appears that inode is not skeleton, but it could be marked wrongly, fix it.
+                    //Ideally this should not happen and we should've put an ASSERT here. But for the timebeing lets
+                    //fix the anomaly on the fly.
+                    foreach (String item in currDir.items)
+                    {
+                        string fullChildPath = (path == "\\") ? ("\\" + item) : (path + "\\" + item);
+                        if (!inodes.Contains(fullChildPath))
+                        {
+                            //We have a non-skeleton inode, but not all of its children are present incore, so reload it?
+                            currDir.isInodeSkeleton = true;
+                            return LoadDirectory(path);
+                        }
+                    }
+                }
                 return true;
             }
             else
             {
+                /*
+                 * We must load the parent first, and then this directory
+                 */ 
                 string firstComponent;
                 //Now this directory in not incore. Lets load the parent first.
                 if (LoadDirectory(GetParentPath(path, out firstComponent)))
                 {
                     //We dont know if this directory is present at all in the parent path
-                    return inodes.Contains(path);
+                    if (inodes.Contains(path))
+                    {
+                        //recurse call same path
+                        return LoadDirectory(path);
+                    }
                 }
-                else
-                {
-                    return false;
-                }
+                return false;
             }
         }
 
@@ -165,7 +229,7 @@ namespace REDFS_ClusterMode
                 //Load directory should suceed provided that its in the filesystem.
                 if (LoadDirectory(GetParentPath(fullPath, out firstComponent)))
                 {
-                    return GetInode(fullPath);
+                    return (REDFSInode)inodes[fullPath];
                 }
                 else
                 {
@@ -352,7 +416,7 @@ namespace REDFS_ClusterMode
                         MoveInode(fsid, srcPath + "\\" + f.FileName, destPath + "\\" + f.FileName, false, false);
                     }
                 }
-                return false;
+                return true;
             }
             else
             {
@@ -412,8 +476,11 @@ namespace REDFS_ClusterMode
                 string finalComponent;
                 string parent = GetParentPath(path, out finalComponent);
                 REDFSInode rfi = (REDFSInode)inodes[parent];
+                DEFS.ASSERT(rfi != null && rfi.isDirectory(), "Should be a directory!");
+
                 rfi.items.Remove(finalComponent);
                 inodes.Remove(path);
+                rfi.isDirty = true;
                 return true;
             }
             else
@@ -441,13 +508,13 @@ namespace REDFS_ClusterMode
             {
                 string finalComponent;
                 string parent = GetParentPath(path, out finalComponent);
+
                 REDFSInode rfi = (REDFSInode)inodes[parent];
-                if (!rfi.isDirectory())
-                {
-                    throw new NotImplementedException();
-                }
+                DEFS.ASSERT(rfi != null && rfi.isDirectory(), "Should be a directory!");
 
                 REDFSInode rfit = (REDFSInode)inodes[path];
+                DEFS.ASSERT(rfit != null && !rfit.isDirectory(), "Should be a directory!");
+
                 List<string> clist = (List<string>)rfit.ListFilesWithPattern("*");
 
                 //first copy the list
@@ -464,10 +531,6 @@ namespace REDFS_ClusterMode
                     {
                         DeleteDirectory(childpath);
                     }
-                    else if (FileExists(childpath))
-                    {
-                        DeleteFile(childpath);
-                    }
                     else
                     {
                         throw new NotImplementedException();
@@ -475,6 +538,7 @@ namespace REDFS_ClusterMode
                 }
 
                 rfi.items.Remove(finalComponent);
+                rfi.isDirty = true;
                 inodes.Remove(path);
                 return true;
             }
@@ -500,10 +564,13 @@ namespace REDFS_ClusterMode
 
         public Boolean FlushFileBuffers(string filePath)
         {
+
+            DEFS.ASSERT(inodes.Contains(filePath), "Inode not present incore, we seem to have flushed out quickly!");
+
             if (LoadInode(filePath))
             {
                 REDFSInode rfi = (REDFSInode)inodes[filePath];
-                rfi.FlushFileBuffers();
+                rfi.FlushFileBuffers(redfsCoreLocalCopy);
                 return true;
             }
             else
@@ -554,6 +621,14 @@ namespace REDFS_ClusterMode
                 REDFSInode i = (REDFSInode)inodes[dirPath];
                 return i.isDirectory();
             }
+            else
+            {
+                if (LoadInode(dirPath))
+                {
+                    REDFSInode i = (REDFSInode)inodes[dirPath];
+                    return i.isDirectory();
+                }
+            }
             return false;
         }
 
@@ -563,6 +638,15 @@ namespace REDFS_ClusterMode
             {
                 REDFSInode i = (REDFSInode)inodes[filePath];
                 return (i.isDirectory() == false);
+            } 
+            else
+            {
+                if (LoadInode(filePath))
+                {
+                    REDFSInode i = (REDFSInode)inodes[filePath];
+                    return (i.isDirectory() == false);
+
+                } 
             }
             return false;
         }
@@ -643,7 +727,8 @@ namespace REDFS_ClusterMode
         {
             if (inodes[fullPath] == null)
             {
-                return false;
+                REDFSInode ino = (REDFSInode)GetInode(fullPath);
+                return (ino != null);
             }
             else
             {
@@ -694,17 +779,28 @@ namespace REDFS_ClusterMode
             Console.WriteLine("Printing contents of REDFSTree. [DONE]");
         }
 
-        public void SyncTree(RedFS_FSID fsid)
+        public void SyncTree()
         {
             lock (inodes)
             {
-                DEFS.ASSERT(fsid.get_fsid() == thisFsid, "Fsid mismatch in synctree");
-                RedFS_Inode inowip = fsid.get_inode_file_wip("Sync");
-                RedFS_Inode imapwip = fsid.get_inodemap_wip();
+                RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("Sync");
+                RedFS_Inode imapwip = fsidLocalCopy.get_inodemap_wip();
 
                 //Instead of walking the dictionary, lets walk the tree, DFS and write out nodes
                 REDFSInode rootdir = (REDFSInode)inodes["\\"];
 
+                /*
+                 * It could be the case that a directory is dirty but its a skeleton. Say a file was added/removed or modified (renamed)
+                 * We need to reload the directory and then write it out back. So before we run sync, lets find out the list of
+                 * directories thats needs to be reloaded.
+                 */ 
+                List<string> dirsToBeloaded = new List<string>();
+                rootdir.PreSyncDirectoryLoadList(dirsToBeloaded, inodes);
+
+                foreach (string dir in dirsToBeloaded)
+                {
+                    LoadDirectory(dir);
+                }
                 rootdir.SyncInternal(inowip, redfsCoreLocalCopy, inodes);
                 redfsCoreLocalCopy.sync(inowip);
                 redfsCoreLocalCopy.sync(imapwip);
@@ -712,9 +808,8 @@ namespace REDFS_ClusterMode
                 redfsCoreLocalCopy.flush_cache(imapwip, false);
 
                 //very important for imap and inode files to be writtin out correctly
-                redfsCoreLocalCopy.redfs_commit_fsid(fsid);
+                redfsCoreLocalCopy.redfs_commit_fsid(fsidLocalCopy);
             }
         }
-
     }
 }

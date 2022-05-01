@@ -238,10 +238,6 @@ namespace REDFS_TESTS
             Assert.IsTrue(prevFreedDbns[0] == 900 + OPS.MIN_ALLOCATABLE_DBN);
             Assert.IsTrue(prevFreedDbns[99] == 999 + OPS.MIN_ALLOCATABLE_DBN);
 
-            //rba.SyncAndTerminate();
-            //Close
-            //rps.shut_down();
-
             //Lets read the files to confirm
             CleanupTestContainer(containerName);
         }

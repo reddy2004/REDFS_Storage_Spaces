@@ -43,6 +43,8 @@ namespace REDFS_ClusterMode
         public List<string> items = new List<string>(); //all files/dir names
         public Boolean isInodeSkeleton = false;
 
+        private long m_creation_time;
+
         public RedFS_Inode myWIP;
 
         public REDFSInode(Boolean isDirectory, string parent, string name)
@@ -62,6 +64,24 @@ namespace REDFS_ClusterMode
             fileInfo.LastWriteTime = DateTime.Now;
 
             parentDirectory = parent;
+
+            m_creation_time = DateTime.Now.ToUniversalTime().Ticks;
+            /*
+            if (name.Length >= 2 && name.Length <= 4 && name.IndexOf("d") == 0) { }
+            else {
+                DEFS.ASSERT(name == "\\" || name.IndexOf("\\") < 0, "Incorrect name in filename: " + name);
+            }*/
+        }
+
+        public int get_inode_obj_age()
+        {
+            long elapsed = (DateTime.Now.ToUniversalTime().Ticks - m_creation_time);
+            return (int)(elapsed / 10000000);
+        }
+
+        public void touch_inode_obj()
+        {
+            m_creation_time = DateTime.Now.ToUniversalTime().Ticks;
         }
 
         public void LoadWipForExistingInode(REDFSCore redfsCore, RedFS_Inode inowip, int ino, int pino)
@@ -69,6 +89,12 @@ namespace REDFS_ClusterMode
             if (fileInfo.Attributes.HasFlag(FileAttributes.Normal))
             {
                 myWIP = new RedFS_Inode(WIP_TYPE.REGULAR_FILE, ino, pino);
+                redfsCore.redfs_checkout_wip(inowip, myWIP, ino);
+
+                //mark as not dirty.
+                myWIP.is_dirty = false;
+                isDirty = false;
+
                 //throw new SystemException("Not yet implimented!");
             }
             else
@@ -76,11 +102,16 @@ namespace REDFS_ClusterMode
                 myWIP = new RedFS_Inode(WIP_TYPE.DIRECTORY_FILE, ino, pino);
                 redfsCore.redfs_checkout_wip(inowip, myWIP, ino);
 
+                //mark as not dirty.
+                myWIP.is_dirty = false;
+                isDirty = false;
+
+                //Keep the json string in memory for debugging
                 byte[] buffer = new byte[myWIP.get_filesize()];
                 redfsCore.redfs_read(myWIP, 0, buffer, 0, buffer.Length);
-
                 string jsonString = Encoding.UTF8.GetString(buffer);               
             }
+            touch_inode_obj();
         }
 
         public void CreateWipForNewlyCreatedInode(int fsid, int ino, int pino)
@@ -97,12 +128,14 @@ namespace REDFS_ClusterMode
             }
             myWIP.is_dirty = true;
             isDirty = true;
+            touch_inode_obj();
         }
         public void InitializeDirectory(List<string> children)
         {
             if (isDirectory())
             {
                 isInodeSkeleton = false;
+                touch_inode_obj();
             }
             else
             {
@@ -115,6 +148,7 @@ namespace REDFS_ClusterMode
             if (!isDirectory())
             {
                 isInodeSkeleton = false;
+                touch_inode_obj();
             }
             else
             {
@@ -131,11 +165,6 @@ namespace REDFS_ClusterMode
 
         }
 
-        private string GetParentPath()
-        {
-            return parentDirectory;
-        }
-
         public Boolean isDirectory()
         {
             return fileInfo.Attributes.HasFlag(FileAttributes.Directory);
@@ -145,9 +174,9 @@ namespace REDFS_ClusterMode
         {
             if (isDirectory())
             {
-                //Dont care if directory or file. we can optimize later.
                 items.Add(fileName);
                 isDirty = true;
+                touch_inode_obj();
                 return true;
             }
             else
@@ -183,22 +212,29 @@ namespace REDFS_ClusterMode
                 fileInfo.Length = length;
                 myWIP.set_filesize(length);
                 isDirty = true;
+                touch_inode_obj();
                 return true;
             }
         }
 
         public void SetAttributes(FileAttributes newAttr)
         {
-
+            touch_inode_obj();
         }
 
+        /*
+         * When sync'd, thisdir will loose track of the file in this directory. Its its the responsibility
+         * of the called to remove it from the incore inodes as well or we will simply hog up space in memory
+         */ 
         public Boolean RemoveInodeNameFromDirectory(string fileName)
         {
+            DEFS.ASSERT(isDirectory(), "Should be a directory, if we want to remove a file from it");
             foreach(string f in items)
             {
                 if (f == fileName)
                 {
                     items.Remove(fileName);
+                    touch_inode_obj();
                     return true;
                 }
             }
@@ -275,6 +311,7 @@ namespace REDFS_ClusterMode
                 }
             }
             bytesWritten = currentBufferOffset;
+            touch_inode_obj();
             return true;
         }
 
@@ -340,40 +377,20 @@ namespace REDFS_ClusterMode
                 }
             }
             bytesRead = currentBufferOffset;
+            touch_inode_obj();
             return true;
         }
 
-        public Boolean FlushFileBuffers()
+        public Boolean FlushFileBuffers(REDFSCore redfsCore)
         {
             if (isDirty)
             {
                 Console.WriteLine("Flush file buffers " + fileInfo.FileName);
+                redfsCore.sync(myWIP);
+                redfsCore.flush_cache(myWIP, false);
             }
             return true;
         }
-
-        /*
-         * For a directory, remove all the file list and set the flag as skeleton
-         * For a file, clear out all the buffers and set the flag. There should 
-         * be no dirty/incode data after this call.
-         */ 
-        public Boolean MakeInodeAsSkeleton()
-        {
-            if (isDirectory())
-            {
-                //By now all files are  removed from the main 'inodes' dictionary
-                //assert that directory is not dirty
-            }
-            else
-            {
-                //assert file does not have dirty buffers.
-                //clear out all data in memory, this inode is removed from the 'inode' dictionary
-            }
-            isInodeSkeleton = true;
-            return true;
-        }
-
-
 
         //---------------------------------------------------------------------------------------------------------------------------
         //                    Methods called with obj of REDFSCore, it means that we do actual disk io. myWip should also be valid;
@@ -390,23 +407,101 @@ namespace REDFS_ClusterMode
                 redfsCore.redfs_resize_wip(myWIP.get_filefsid(), myWIP, length, preAlloc);
                 fileInfo.Length = myWIP.get_filesize();
                 isDirty = true;
+                touch_inode_obj();
                 return true;
             }
         }
 
         /*
+         * Walk the existing tree from root and figure out which directories need to be reloaded and bought back into
+         * memory because they are dirty. 
+         * Ex. new inode added, moved, modified etc.
+         */ 
+        public void PreSyncDirectoryLoadList(List<string> dirsToBeloaded, IDictionary allinodes)
+        {
+            DEFS.ASSERT(isDirectory(), "PreSyncDirectoryLoadList must be called only for a directory");
+
+            if (isDirty)
+            {
+                string selfdirpath = (parentDirectory == null) ? "\\" : ((parentDirectory == "\\") ? 
+                     "\\" + fileInfo.FileName : parentDirectory + "\\" + fileInfo.FileName);
+                dirsToBeloaded.Add(selfdirpath);
+            }
+
+            foreach (String item in items)
+            {
+                string childpath = (parentDirectory == null) ? ("\\" + item) :
+                    (parentDirectory == "\\") ? ("\\" + fileInfo.FileName + "\\" + item) :
+                    (parentDirectory + "\\" + fileInfo.FileName + "\\" + item);
+
+                if (allinodes.Contains(childpath))
+                {
+                    REDFSInode child = (REDFSInode)allinodes[childpath];
+                    if (child.isDirectory())
+                    {
+                        child.PreSyncDirectoryLoadList(dirsToBeloaded, allinodes);
+                    }
+                }
+            }
+        }
+
+        /*
          * Write out all the inmemory data
+         * 
+         * Steps,
+         * For each directory from the root.
+         * a. If dir is dirty, reload the contents to write back out correctly if its a skeleton.
+         * b. If dir is skeleton and not dirty, dont worry, just sync incore contents.
+         * 
+         * Once children are cleared, check if its become a skeleton or not.
+         * a. If yes, then see if dir can remove itself and mark its parent as skeleton.
+         * b. If no, check we if we have any aged files/dir and remove them.
          */ 
         public void SyncInternal(RedFS_Inode inowip, REDFSCore redfsCore, IDictionary allinodes)
         {
+            if (fileInfo.FileName == "\\")
+            {
+                DEFS.ASSERT(parentDirectory == null, "Parent is null for rootdir");
+            }
+            else
+            {
+                DEFS.ASSERT(parentDirectory != null, "parent cannot be null for non-root dir");
+            }
+
             if (isDirectory() && allinodes != null)
             {
-                if (isDirty)
-                {
-                    OnDiskDirectoryInfo oddi = new OnDiskDirectoryInfo();
-                    oddi.ino = myWIP.get_ino();
-                    oddi.fileInfo = fileInfo;
+                OnDiskDirectoryInfo oddi = new OnDiskDirectoryInfo();
+                oddi.ino = myWIP.get_ino();
+                oddi.fileInfo = fileInfo;
 
+                if (!isDirty)
+                {
+                  //  While dir1 is loaded, the items are zero while it hsould have 100
+                    foreach (String item in items)
+                    {
+                        lock (allinodes)
+                        {
+                            string childpath = (parentDirectory == null) ? ("\\" + item) :
+                                (parentDirectory == "\\") ? ("\\" + fileInfo.FileName + "\\" + item) :
+                                (parentDirectory + "\\" + fileInfo.FileName + "\\" + item);
+                            REDFSInode child = (REDFSInode)allinodes[childpath];
+
+                            if (child != null)
+                            {
+                                child.SyncInternal(inowip, redfsCore, allinodes);
+                            }
+
+                            //OnDiskInodeInfo odii = new OnDiskInodeInfo();
+                            //odii.fileInfo = child.fileInfo;
+                            //odii.ino = child.myWIP.get_ino();
+
+                            //oddi.inodes.Add(odii);
+                        }
+                    }
+                }
+                else if (isDirty) 
+                {
+                    DEFS.ASSERT(!isInodeSkeleton, "Called must have reloaded dir in case of dirty");
                     foreach (String item in items)
                     {
                         lock (allinodes)
@@ -431,7 +526,7 @@ namespace REDFS_ClusterMode
 
                     cache_string = json;
 
-                    if (myWIP.m_ino == 2)
+                    if (myWIP.get_ino() == 64 || myWIP.get_ino() == 65)
                     {
                         Console.WriteLine("Just to stop here for debug!");
                     }
@@ -457,10 +552,9 @@ namespace REDFS_ClusterMode
 
                 foreach (String item in items)
                 {
-
-                        OnDiskInodeInfo odii = new OnDiskInodeInfo();
-                        odii.fileInfo.FileName = item;
-                        oddi.inodes.Add(odii);
+                    OnDiskInodeInfo odii = new OnDiskInodeInfo();
+                    odii.fileInfo.FileName = item;
+                    oddi.inodes.Add(odii);
                 }
 
                 string json = JsonConvert.SerializeObject(oddi, Formatting.Indented);
@@ -477,6 +571,84 @@ namespace REDFS_ClusterMode
             else if (isDirty)
             {
                 throw new SystemException("Not yet implimented!");
+            }
+
+            /*
+             * Here comes the GC part, this could be a directory or a file. If we keep loading the entire directory structure,
+             * it will lead to bad results. So the idea is that we just load a file and only its parent directories we need.
+             * It means that a directory will have entries of its contents, but not all of them are incore. This is called a skeleton
+             * directory
+             * 
+             * For a file, if its old and unused, remove it from the inodes[] map file and mark its parent as skeleton. i.e not all
+             * of its parents children (this one) is present incore in inodes[] map file.
+             * 
+             * For a directory, if non of its children are incore and its skeleton, remove it from inodes[] map file and mark its parent
+             * as skeleton
+             */
+
+            if (myWIP.get_ino() == 64 || myWIP.get_ino() == 65)
+            {
+                Console.WriteLine("dor debug");
+            }
+
+            int age = get_inode_obj_age();
+            if (!isDirectory())
+            {
+                //File
+                if (age > 20 && isDirty == false && myWIP.is_dirty == false)
+                {
+                    //remove self
+                    allinodes.Remove(fileInfo.FileName);
+                    REDFSInode parent = (REDFSInode)allinodes[parentDirectory];
+                    parent.isInodeSkeleton = true;
+                }
+            }
+            else
+            {
+                if (!(age > 20 && isDirty == false && myWIP.is_dirty == false))
+                {
+                    //not a candidate
+                    return;
+                }
+
+                Boolean isValidNodePresent = false;
+
+                //Now check all its children are either "dir+skeleton" OR "file+notininodes[]".
+                foreach (String item in items)
+                {
+                    lock (allinodes)
+                    {
+                        string childpath = (parentDirectory == "\\") ? ("\\" + fileInfo.FileName + "\\" + item) :
+                            (parentDirectory + "\\" + fileInfo.FileName + "\\" + item);
+                        
+                        if (allinodes.Contains(childpath))
+                        {
+                            REDFSInode child = (REDFSInode)allinodes[childpath];
+                            if (!child.isDirectory())
+                            {
+                                isValidNodePresent = true;
+                            }
+                        }
+                        else
+                        {
+                            DEFS.ASSERT(isInodeSkeleton == true, "We dont have a child incore, so we must be a skeleton!");
+                        }
+                    }
+                }
+
+                lock (allinodes)
+                {
+                    if (!isValidNodePresent && fileInfo.FileName != "\\")
+                    {
+                        //remove self
+                        string selfpath = (parentDirectory == "\\") ?(fileInfo.FileName) :
+                            (parentDirectory + "\\" + fileInfo.FileName);
+
+                        allinodes.Remove(selfpath);
+                        REDFSInode parent = (REDFSInode)allinodes[parentDirectory];
+                        parent.isInodeSkeleton = true;
+                    }
+                }
             }
         }
     }

@@ -53,7 +53,7 @@ namespace REDFS_TESTS
          * file system bringing the total space available in the container to 3GB
          * 
          * Since REDFS has concept of segments of 1GB, we can create two segments of 1GB in the chunk of size 2G
-         * Segment is always 1GB at some offset in a chunk.
+         * Segment is always 1GB at some offset (in GB) in a chunk.
          * Chunk is a file which is in GBs, and an n-GB chunk has n segments that can be used.
          * 
          * REDFS dbn (disk block number) is spread over segments. Each of these 1GB segment in DBN space could be 
@@ -122,7 +122,7 @@ namespace REDFS_TESTS
 
             //To recover all allocated buffers
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
         }
 
         /*
@@ -147,7 +147,7 @@ namespace REDFS_TESTS
             //RedFS_Inode rootDirWip = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP;
             //RedFS_Inode inoFile = REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("tester");
 
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
 
             byte[] buffer_in = new byte[99999];
             byte[] buffer_out = new byte[99999];

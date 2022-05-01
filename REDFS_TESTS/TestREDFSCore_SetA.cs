@@ -98,7 +98,7 @@ namespace REDFS_TESTS
 
             //To recover all allocated buffers
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
         }
 
         private void CreateFewFilesInRootDir(int numFiles)
@@ -118,7 +118,7 @@ namespace REDFS_TESTS
             Assert.IsTrue(inoFile.is_dirty == true);
             //Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").isDirty == true);
 
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
 
             Assert.IsTrue(inoFile.is_dirty == false);
             Assert.IsTrue(rootDirWip.is_dirty == false);
@@ -144,7 +144,7 @@ namespace REDFS_TESTS
             RedFS_FSID rfsid_p = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
             RedFS_Inode inoFile_p = REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("tester");
             RedFS_Inode rootDirWip_p = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP;
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid_p);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
 
             REDFSCore rfcore_new = REDFS.redfsContainer.ifsd_mux.redfsCore;
             rfcore_new.redfs_discard_wip(inoFile_p);
@@ -156,7 +156,7 @@ namespace REDFS_TESTS
             //We have to do sync tree before cleanup or unmount
             REDFS.MountContainer(true, containerName);
             RedFS_FSID rfsid_temp = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid_temp);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
 
             //Now lets read the ino file & the root dir inode
             RedFS_Inode inoFile_t = REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("tester");

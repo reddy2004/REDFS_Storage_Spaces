@@ -126,6 +126,7 @@ namespace REDFS_ClusterMode
                         if (REDFS.redfsContainer != null)
                         {
                             REDFS.redfsContainer.FlushAndWrapUp();
+                            REDFS.redfsContainer = null;
                         }
                         resp.ContentType = "application/json";
                         resp.ContentEncoding = Encoding.UTF8;
@@ -538,6 +539,10 @@ namespace REDFS_ClusterMode
                                 case "unmount":
                                     if (REDFS.redfsContainer.containerOperations.currentlyMountedVolume == b2.volumeId)
                                     {
+                                        while (REDFS.redfsContainer.containerOperations.StopAllRunningOperations() == false)
+                                        {
+                                            Thread.Sleep(500);
+                                        }
                                         REDFS.redfsContainer.containerOperations.currentlyMountedVolume = 0;
                                         REDFS.redfsContainer.UnMountVolume();
                                     }

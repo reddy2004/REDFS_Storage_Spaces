@@ -21,6 +21,7 @@ namespace REDFS_ClusterMode
         {
             // Create a Http server and start listening for incoming connections
             System.Net.HttpListener listener = new HttpListener();
+            listener.IgnoreWriteExceptions = true;
             listener.Prefixes.Add("http://localhost:8000/");
             listener.Start();
             Console.WriteLine("Listening for connections on {0}", "http://localhost:8000/");

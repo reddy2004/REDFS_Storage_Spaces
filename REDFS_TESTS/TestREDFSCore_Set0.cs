@@ -175,7 +175,7 @@ namespace REDFS_TESTS
             PrintableWIP pwip1 = REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_list_tree(inoFile);
             
 
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
             PrintableWIP pwip2 = REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_list_tree(inoFile);
 
             CleanupTestContainer(containerName);
@@ -225,7 +225,7 @@ namespace REDFS_TESTS
 
             //To recover all allocated buffers
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
 
             //Lets create 1000 files
             for (int f = 0; f < 1000; f++)
@@ -241,7 +241,7 @@ namespace REDFS_TESTS
 
             Thread.Sleep(5000);
 
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
 
             Assert.IsTrue(inoFile.is_dirty == false);
             Assert.IsTrue(rootDirWip.is_dirty == false);
@@ -283,6 +283,7 @@ namespace REDFS_TESTS
 
             RedFS_Inode inoFile_t = REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("tester");
 
+            RedFS_FSID myNewFSID = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
             //REDFS.redfsContainer.ReloadAllFSIDs();
             RedFS_Inode rootDirWip_t = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP;
 
@@ -316,7 +317,7 @@ namespace REDFS_TESTS
             
 
             RedFS_FSID rfsid_temp = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid_temp);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
 
             Assert.IsFalse(rootDirWip_x.is_dirty);
 

@@ -24,3 +24,6 @@ In redfscore - grow wip
 
 
             when we write 9MB, the second L1 goes missing.
+
+
+partial write with read+merge+write back is broken.

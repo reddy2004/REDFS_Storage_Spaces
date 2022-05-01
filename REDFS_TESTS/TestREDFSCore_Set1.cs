@@ -114,7 +114,7 @@ namespace REDFS_TESTS
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].getNumInodesInTree() == 4);
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FileExists("\\MyDir\\vikrama"));
 
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree(rfsid);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
 
             Assert.IsTrue(rfsid != null, "");
 

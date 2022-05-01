@@ -1685,6 +1685,11 @@ namespace REDFS_ClusterMode
                 return ret;
             }
 
+            if (wip.m_ino == 0)
+            {
+                Console.WriteLine("inowip");
+            }
+
             if (level == 2)
             {
                 if (wip.get_inode_level() == 2)
@@ -1808,11 +1813,11 @@ namespace REDFS_ClusterMode
                     RedBufL0 wbl0 = (RedBufL0)redfs_allocate_buffer(wip, BLK_TYPE.REGULAR_FILE_L0, someL0fbn, true, Array.Empty<long>(), 0);
                     wbl0.m_dbn = dbn0;
 
-                    if (forwrite == false)
-                    {
+                    //if (forwrite == false)
+                    //{
                         ReadPlanElement rpe = redfsBlockAllocator.PrepareReadPlanSingle(dbn0);
                         redFSPersistantStorage.ExecuteReadPlanSingle(rpe, wbl0);
-                    }
+                    //}
 
                     if (forwrite == false && wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE)
                     {
