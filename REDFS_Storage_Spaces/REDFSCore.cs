@@ -84,6 +84,21 @@ namespace REDFS_ClusterMode
             wbfsid.set_logical_data(0);
             wbfsid.set_inodefile_wip(inowip);
             */
+
+            /*
+             * Now lets add the base chunk as the first default type segment in dbn space,
+             * We should add the first chunk by default in normal mode. For tests we add
+             * this into our span manually
+             */
+            if (!REDFS.isTestMode)
+            {
+                RAWSegment[] dataDefault1 = new RAWSegment[1];
+                dataDefault1[0] = new RAWSegment(SEGMENT_TYPES.Default, 0, 1);
+
+                DBNSegmentSpan dss1 = new DBNSegmentSpan(SPAN_TYPE.DEFAULT, 0, dataDefault1, null);
+                DBNSegmentSpanMap spanMap = REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap;
+                spanMap.InsertDBNSegmentSpan(dss1);
+            }
             RedFS_FSID wbfsid  = CreateEmptyFSID(0);
             redFSPersistantStorage.write_fsid(wbfsid);
             return wbfsid;
@@ -122,6 +137,8 @@ namespace REDFS_ClusterMode
             DEFS.ASSERT(inodeFile.get_incore_cnt() == 0, "Dont cache blocks during init");
             DEFS.ASSERT(iMapWip.get_incore_cnt() == 0, "Dont cache blocks during init");
 
+            redfsBlockAllocator.allocBitMap32TBFile.fsid_setbit(newFsid.get_fsid());
+
             return newFsid;
         }
 
@@ -150,6 +167,10 @@ namespace REDFS_ClusterMode
 
             // Update refcounts here 
             RedFS_Inode inowip = bfs.get_inode_file_wip("FSID_DUP");
+
+            RedFS_Inode newinowip = newone.get_inode_file_wip("fsid dup");
+
+            DEFS.ASSERT(inowip.Equals(newinowip), "ino wips must match after fsid duping!");
             lock (inowip)
             {
                 if (inowip.get_inode_level() == 0)
@@ -177,6 +198,7 @@ namespace REDFS_ClusterMode
                     }
                 }
             }
+            
             return newone;
         }
 
@@ -590,7 +612,14 @@ namespace REDFS_ClusterMode
                 }
                 else
                 {
-                    redfs_grow_wip_internal(fsid, wip, newsize, dummy6); //usually make dummy .xxx tofix 
+                    if (wip.m_ino == 0 || wip.m_ino == 1)
+                    {
+                        redfs_grow_wip_internal_superfast2(wip, newsize, false);
+                    }
+                    else
+                    {
+                        redfs_grow_wip_internal(fsid, wip, newsize, dummy6); //usually make dummy .xxx tofix 
+                    }
                 }
             }
             else
@@ -1221,7 +1250,7 @@ namespace REDFS_ClusterMode
 
         public void sync(RedFS_Inode wip)
         {
-            if (wip.m_ino == 2)
+            if (wip.m_ino >=64)
             {
                 Console.WriteLine("Just to capture this execution point in debug");
             }

@@ -16,6 +16,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestAllocateDBNsInDefaultSpan()
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Set1_1_Test" + id1;
@@ -97,6 +98,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestAllocateDBNsInRAID5Span()
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Set1_3_Test" + id1;
@@ -220,6 +222,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestBatchAllocateDBNsInDefaultSpan()
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Set1_7_Test" + id1;

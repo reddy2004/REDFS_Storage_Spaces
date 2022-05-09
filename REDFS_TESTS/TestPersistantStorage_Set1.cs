@@ -131,6 +131,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestInitPersistantStorage_1()
         {
+            REDFS.isTestMode = true;
             string containerName;
             InitNewTestContainer(out containerName);
             string chunk1path;
@@ -204,6 +205,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestInitPersistantStorage_2()
         {
+            REDFS.isTestMode = true;
             string containerName;
             InitNewTestContainer(out containerName);
             string chunk1path;

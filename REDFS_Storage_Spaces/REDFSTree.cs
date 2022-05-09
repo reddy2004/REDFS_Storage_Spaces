@@ -34,6 +34,21 @@ namespace REDFS_ClusterMode
             DEFS.ASSERT(inowip.get_filesize() == (long)128 * 1024 * 1024 * 1024, "inowip size mismatch " + inowip.get_filesize());
         }
 
+        public void LoadRootDirectoryWipForNewlyCreatedFSID()
+        {
+            RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("CTreeinit");
+            DEFS.ASSERT(inowip.get_filesize() == (long)128 * 1024 * 1024 * 1024, "inowip size mismatch " + inowip.get_filesize());
+
+            ((REDFSInode)inodes["\\"]).LoadWipForExistingInode(redfsCoreLocalCopy, inowip, 2, -1);
+            long rootDirSize = ((REDFSInode)inodes["\\"]).myWIP.get_filesize();
+            DEFS.ASSERT(0 != rootDirSize, "Checking wip for a new rootdir in new fsid, but size is ro zero!");
+
+            //test
+            byte[] buffer = new byte[rootDirSize];
+            redfsCoreLocalCopy.redfs_read(((REDFSInode)inodes["\\"]).myWIP, 0, buffer, 0, buffer.Length);
+            string result = System.Text.Encoding.UTF8.GetString(buffer);
+        }
+
         public void CreateRootDirectoryWip()
         {
             RedFS_Inode wip = new RedFS_Inode(WIP_TYPE.DIRECTORY_FILE, 2, -1);
@@ -166,7 +181,7 @@ namespace REDFS_ClusterMode
                             bool isDirectory = item.fileInfo.Attributes.HasFlag(FileAttributes.Directory);
                             string fullChildPath = (path == "\\")? ("\\" + item.fileInfo.FileName) : ( path + "\\" + item.fileInfo.FileName);
                             int ino = item.ino;
-                            inodes[fullChildPath] = new REDFSInode(true, path, item.fileInfo.FileName);
+                            inodes[fullChildPath] = new REDFSInode(isDirectory, path, item.fileInfo.FileName);
                             RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("load some skeleton dir");
                             ((REDFSInode)inodes[fullChildPath]).LoadWipForExistingInode(redfsCoreLocalCopy, inowip, ino, currDir.myWIP.get_ino());
 
@@ -317,12 +332,12 @@ namespace REDFS_ClusterMode
             return true;
         }
 
-        public Boolean CreateFile(RedFS_FSID fsid, string filePath)
+        public Boolean CreateFile(string filePath)
         {
             string firstComponent;
             string inDir = GetParentPath(filePath, out firstComponent);
             Console.WriteLine("CreateFile: " + filePath + " Log: Attempting to create new file [" + firstComponent + "] in " + inDir);
-            return CreateFile(fsid, inDir, firstComponent);
+            return CreateFile(fsidLocalCopy, inDir, firstComponent);
         }
 
         public Boolean MoveInode(RedFS_FSID fsid, string srcPath, string destPath, bool replace, bool isDirectory)
@@ -403,7 +418,7 @@ namespace REDFS_ClusterMode
             else if (!DirectoryExists(destPath) && isDirectory && !replace)
             {
                 //XXX todo, recursive approach
-                CreateDirectory(fsid, destPath);
+                CreateDirectory(destPath);
                 IList<FileInformation> files = FindFilesWithPattern(srcPath, "*");
                 foreach (FileInformation f in files)
                 {
@@ -442,12 +457,12 @@ namespace REDFS_ClusterMode
                 return CreateFileInternal(fsid, inFolder, fileName);
             }
         }
-        public Boolean CreateDirectory(RedFS_FSID fsid, string dirPath)
+        public Boolean CreateDirectory(string dirPath)
         {
             string firstComponent;
             string inDir = GetParentPath(dirPath, out firstComponent);
             Console.WriteLine("Attempting to create new directory [" + firstComponent + "] in " + inDir);
-            return CreateDirectory(fsid, inDir, firstComponent);
+            return CreateDirectory(fsidLocalCopy, inDir, firstComponent);
         }
 
         public Boolean CreateDirectory(RedFS_FSID fsid, string inFolder, string directoryName)
@@ -701,7 +716,7 @@ namespace REDFS_ClusterMode
             if (LoadInode(fileName))
             {
                 REDFSInode rfi = (REDFSInode)inodes[fileName];
-                return rfi.WriteFile(buffer, out bytesWritten, offset);
+                return rfi.WriteFile(redfsCoreLocalCopy, buffer, out bytesWritten, offset);
             }
             else
             {
@@ -714,7 +729,7 @@ namespace REDFS_ClusterMode
         {
             if (LoadInode(fileName))
             {
-                return ((REDFSInode)inodes[fileName]).ReadFile(buffer, out bytesRead, offset);
+                return ((REDFSInode)inodes[fileName]).ReadFile(redfsCoreLocalCopy, buffer, out bytesRead, offset);
             }
             else
             {
@@ -777,6 +792,12 @@ namespace REDFS_ClusterMode
                 Console.WriteLine("Key = {0}, Value = {1}", kvp.Key, content);
             }
             Console.WriteLine("Printing contents of REDFSTree. [DONE]");
+        }
+
+        public int FlushCacheL0s()
+        {
+            REDFSInode rootdir = (REDFSInode)inodes["\\"];
+            return rootdir.FlushCacheL0s(redfsCoreLocalCopy, inodes);
         }
 
         public void SyncTree()

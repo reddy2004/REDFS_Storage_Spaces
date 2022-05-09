@@ -27,6 +27,8 @@ namespace REDFS_TESTS
          */
         private void InitNewTestContainer(out string containerName)
         {
+            REDFS.isTestMode = true;
+
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "IntroTestWIPCreation_" + id1;
@@ -141,7 +143,7 @@ namespace REDFS_TESTS
             CreateCloneOfZeroVolume();
 
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile(rfsid, "\\temp.dat");
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile("\\temp.dat");
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].getNumInodesInTree() == 2);
 
             //RedFS_Inode rootDirWip = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP;
@@ -165,7 +167,7 @@ namespace REDFS_TESTS
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].WriteFile("\\temp.dat", buffer_in, out bytesWritten, 0);
 
             Assert.AreEqual(bytesWritten, 99999);
-
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
             /*
              * We dont care that data is written out correctly or flushed. A background thread flushes all dirty buffers
              * to disk. The wrapper ensures that we read what we just wrote. it does  not matter to the caller if the data is
@@ -179,7 +181,7 @@ namespace REDFS_TESTS
             {
                 Assert.AreEqual(buffer_in[i], buffer_out[i]);
             }
-
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
             /*
              * We also dont need to flush the buffers or clear out alloc'd blocks of the file. Since the tree is automanaged, we
              * can just call cleanup or unmount the container and expect that all data is written out cleanly and we manually
@@ -336,6 +338,7 @@ namespace REDFS_TESTS
             rfcore.redfs_discard_wip(myWIP_t);
             rfcore.redfs_discard_wip(myWIP_c);
 
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
             CleanupTestContainer(containerName);
         }
 
@@ -426,7 +429,7 @@ namespace REDFS_TESTS
             }
 
             rfcore.redfs_discard_wip(myWIP);
-
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
             CleanupTestContainer(containerName);
         }
 
@@ -606,7 +609,7 @@ namespace REDFS_TESTS
                 rfcore.flush_cache(clones[cloneid], false);
                 rfcore.redfs_discard_wip(clones[cloneid]);
             }
-
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
             CleanupTestContainer(containerName);
         }
     }

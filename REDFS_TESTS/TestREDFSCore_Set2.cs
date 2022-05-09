@@ -15,6 +15,7 @@ namespace REDFS_TESTS
 
         private void InitNewTestContainer(out string containerName)
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Core_Set2_" + id1;
@@ -96,7 +97,7 @@ namespace REDFS_TESTS
 
 
             //Lets create a file.
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile(rfsid, "\\temp.dat");
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile("\\temp.dat");
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].getNumInodesInTree() == 2);
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FileExists("\\temp.dat"));
 
@@ -191,6 +192,13 @@ namespace REDFS_TESTS
             Assert.AreEqual(wip.get_filesize(), 99999999999);
 
             PrintableWIP pwip1 = rfcc.redfs_list_tree(wip);
+            REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
+            
+            rfcore.redfs_discard_wip(wip);
+
+            REDFSTree rftree = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[myNewFSID.get_fsid()];
+            Thread.Sleep(5000);
+            rftree.SyncTree();
 
             CleanupTestContainer(containerName);
         }

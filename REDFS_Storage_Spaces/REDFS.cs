@@ -41,6 +41,7 @@ namespace REDFS_ClusterMode
     public static class REDFS
     {
         public static REDFSContainer redfsContainer = null;
+        public static Boolean isTestMode = false;
         public static List<ContainerObject> availableContainers = new List<ContainerObject>();
         public static string defaultPath = @"C:\Users\vikra\Documents\REDFS\Global\containers.json";
 
@@ -113,6 +114,7 @@ namespace REDFS_ClusterMode
             Directory.CreateDirectory(containerFolderPath);
             File.Create(volumesFile).Dispose();
             REDFSContainer.CreateBaseChunkFileForNewContainer(containerFolderPath);
+
         }
 
         public static Boolean CreateNewContainer(string cname, string cdescription, string uname, string upassword) 

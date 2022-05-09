@@ -12,18 +12,9 @@ The stripe hole can only filled by background scanners, wich we are offline.
 trying to write to the third block creating race conditions.
 
 
-is wip.iohistory required to be checked in fast_read and fast_write.?
-Can we reset it when we clean the wip.?
+Items
+When using webui, clone does not work. file seem to disappear and we start again with new dir.
+Unmount container from webui causing fatal - not all bufs are recovered.
 
-
-Create a 100 log for tServiceThread for WRLoader.cs
-
-In redfscore - grow wip
-            //XXX todo : Dont have to write out just allocated L0 since they will be overwritten anyway.
-            //Try to write out L1 & L2s instead
-
-
-            when we write 9MB, the second L1 goes missing.
-
-
-partial write with read+merge+write back is broken.
+Files are becoming zero sized after container unmount/remount
+volume id not being assigned correctly

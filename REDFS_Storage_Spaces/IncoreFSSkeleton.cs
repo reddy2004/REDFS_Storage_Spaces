@@ -81,6 +81,11 @@ namespace REDFS_ClusterMode
             var result = DokanResult.Success;
             DokanSideMetrics.m.InsertMetric(METRIC_NAME.DOKAN_CALLS, 1);
 
+            if (fileName == "")
+            {
+                return DokanNet.DokanResult.Success;
+            }
+
             if (fileName == "\\")
             {
                 //Always return success there, we just set the info object.
@@ -157,7 +162,7 @@ namespace REDFS_ClusterMode
                                     return DokanResult.AlreadyExists; //or DokanResult.FileExists;?
                                 }
 
-                                rootDirectory.CreateDirectory(null, filePath);
+                                rootDirectory.CreateDirectory(filePath);
                                 break;
                         }
                     }
@@ -254,7 +259,7 @@ namespace REDFS_ClusterMode
                         bool fileCreated = mode == FileMode.CreateNew || mode == FileMode.Create || (!pathExists && mode == FileMode.OpenOrCreate);
                         if (fileCreated)
                         {
-                            rootDirectory.CreateFile(null, filePath);
+                            rootDirectory.CreateFile(filePath);
 
                             FileAttributes new_attributes = attributes;
                             new_attributes |= FileAttributes.Normal; // Files are always created as Archive

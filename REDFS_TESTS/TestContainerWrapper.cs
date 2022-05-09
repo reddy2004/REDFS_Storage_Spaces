@@ -15,6 +15,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestMultipleContainerCase()
         {
+            REDFS.isTestMode = true;
             int currentKnownContainers = REDFS.availableContainers.Count;
 
             ContainerObject co1 = new ContainerObject();

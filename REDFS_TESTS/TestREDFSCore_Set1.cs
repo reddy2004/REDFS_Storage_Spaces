@@ -15,6 +15,7 @@ namespace REDFS_TESTS
 
         private void InitNewTestContainer(out string containerName)
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Core_Set1_" + id1;
@@ -100,17 +101,17 @@ namespace REDFS_TESTS
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
 
             //Lets create a file.
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile(rfsid, "\\temp.dat");
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile("\\temp.dat");
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].getNumInodesInTree() == 2);
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FileExists("\\temp.dat"));
 
             //Lets create a directory.
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateDirectory(rfsid, "\\MyDir");
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateDirectory("\\MyDir");
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].getNumInodesInTree() == 3);
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].DirectoryExists("\\MyDir"));
 
             //Lets create a file inside the directory.
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile(rfsid, "\\MyDir\\vikrama");
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile("\\MyDir\\vikrama");
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].getNumInodesInTree() == 4);
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FileExists("\\MyDir\\vikrama"));
 

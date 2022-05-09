@@ -123,11 +123,13 @@ namespace REDFS_ClusterMode
                     Console.WriteLine("Shutdown requested");
                     if (!isUserValid)
                     {
+                        REDFS.UnmountContainer();
+                        /*
                         if (REDFS.redfsContainer != null)
                         {
                             REDFS.redfsContainer.FlushAndWrapUp();
                             REDFS.redfsContainer = null;
-                        }
+                        }*/
                         resp.ContentType = "application/json";
                         resp.ContentEncoding = Encoding.UTF8;
                         runServer = false;
@@ -561,8 +563,10 @@ namespace REDFS_ClusterMode
                 else if ((req.HttpMethod == "GET") && req.Url.AbsolutePath.IndexOf("/GetInternalDataOfFSID") == 0)
                 {
                     int fsid = Int32.Parse(req.QueryString["fsid"]);
-                    
-                    string json = "Helklo from C# code";
+
+                    DBNSegmentSpanMap spanMap = REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap;
+
+                    string json = JsonConvert.SerializeObject(spanMap, Formatting.Indented);
                     byte[] data = Encoding.UTF8.GetBytes(json);
 
                     resp.OutputStream.Write(data);

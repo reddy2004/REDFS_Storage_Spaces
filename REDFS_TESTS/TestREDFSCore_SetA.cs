@@ -16,6 +16,7 @@ namespace REDFS_TESTS
 
         private void InitNewTestContainer(out string containerName)
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Core_SetA_" + id1;
@@ -108,7 +109,7 @@ namespace REDFS_TESTS
             //Lets create 1000 files
             for (int f = 0; f < numFiles; f++)
             {
-                REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile(rfsid, "\\temp_" + f + ".dat");
+                REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile("\\temp_" + f + ".dat");
             }
 
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].getNumInodesInTree() == numFiles + 1);

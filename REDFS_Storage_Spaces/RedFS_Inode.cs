@@ -136,13 +136,27 @@ namespace REDFS_ClusterMode
                 return false;
             }
 
+            if ((this.get_ino() != other.get_ino()) || 
+                (this.get_filesize() != other.get_filesize()))
+            {
+                return false;
+            }
+
+            for (int i=0;i<OPS.NUM_PTRS_IN_WIP;i++)
+            {
+                if (this.get_child_dbn(i) != other.get_child_dbn(i))
+                {
+                    return false;
+                }
+            }
+            /*
             for (int i=0;i < data.Length; i++)
             {
                 if (this.data[i] != other.data[i])
                 {
                     return false;
                 }
-            }
+            }*/
             return true;
         }
 

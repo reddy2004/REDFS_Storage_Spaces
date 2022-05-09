@@ -408,6 +408,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
         var volDesc = $("#m1_voldesc").val();
         var volColor = $("#m1_volcolor").val();
 
+        alert("Trying to clone root volume!");
         $scope.volume_operation("clone", 0, volName, volDesc, volColor, function() {
             window.location.href='/config';
         });

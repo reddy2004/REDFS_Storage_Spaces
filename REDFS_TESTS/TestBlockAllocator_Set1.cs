@@ -15,6 +15,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestCreationOfBlockAllocatorWithDefaultSegments()
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Set1_1_Test" + id1;
@@ -86,6 +87,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestCreationOfBlockAllocatorWithMirroredSegments()
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Set1_2_Test" + id1;
@@ -163,6 +165,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestCreationOfBlockAllocatorWithRAID5Segments()
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Set1_3_Test" + id1;

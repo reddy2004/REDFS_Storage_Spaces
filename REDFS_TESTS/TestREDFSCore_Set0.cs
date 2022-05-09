@@ -16,6 +16,7 @@ namespace REDFS_TESTS
 
         private void InitNewTestContainer(out string containerName)
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "Core_Set1_" + id1;
@@ -169,7 +170,7 @@ namespace REDFS_TESTS
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1] != null);
 
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
-            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile(rfsid, "\\temp.dat");
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile("\\temp.dat");
 
             RedFS_Inode inoFile = REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("tester");
             PrintableWIP pwip1 = REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_list_tree(inoFile);
@@ -230,7 +231,7 @@ namespace REDFS_TESTS
             //Lets create 1000 files
             for (int f = 0; f < 1000; f++)
             {
-                REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile(rfsid, "\\temp_" + f + ".dat");
+                REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile("\\temp_" + f + ".dat");
             }
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].getNumInodesInTree() == 1001);
             RedFS_Inode rootDirWip = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP;

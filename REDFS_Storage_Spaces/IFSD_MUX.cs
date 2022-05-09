@@ -39,6 +39,17 @@ namespace REDFS_ClusterMode
             numValidFsids++;
         }
 
+        public int CreateNewFSIDFromExistingFSID(RedFS_FSID rfsid)
+        {
+            int newFsidId = numValidFsids++;
+
+            FSIDList[newFsidId] = redfsCore.redfs_dup_fsid(rfsid);
+            FSIDList[newFsidId].set_dirty(true);
+
+            RedfsVolumeTrees[newFsidId] = new REDFSTree(FSIDList[newFsidId], redfsCore);
+            RedfsVolumeTrees[newFsidId].LoadRootDirectoryWipForNewlyCreatedFSID();
+            return newFsidId;
+        }
         /*
          * Called when a new volume is created by the user from the root volume. This is a vanilla volume
          * with no data
@@ -46,6 +57,7 @@ namespace REDFS_ClusterMode
         public int CreateAndInitNewFSIDFromRootVolume()
         {
             int newFsidId = numValidFsids++;
+
             /*
             RedFS_Inode iMapWip = new RedFS_Inode(WIP_TYPE.PUBLIC_INODE_MAP, 1, -1);
             RedFS_Inode inodeFile = new RedFS_Inode(WIP_TYPE.PUBLIC_INODE_FILE, 0, -1);
@@ -89,7 +101,7 @@ namespace REDFS_ClusterMode
         public void Sync()
         {
             //redFSPersistantStorage uses Windows Filesystems which have their own caching and buffering mechanism. 
-            //redFSPersistantStorage does not have in-memory data to be sync, all write & reads are dont synchronously.
+            //redFSPersistantStorage does not have in-memory data to be sync, all write & reads are done synchronously.
 
             redfsCore.redfsBlockAllocator.Sync();
 
@@ -120,12 +132,39 @@ namespace REDFS_ClusterMode
             redfsCore.redfsBlockAllocator.Sync();
         }
 
+        public void FlushCaches()
+        {
+            lock (FSIDList)
+            {
+                for (int i = 0; i < numValidFsids; i++)
+                {
+                    lock (FSIDList[i])
+                    {
+                        if (FSIDList[i] != null)
+                        {
+                            try
+                            {
+                                if (i != 0)
+                                {
+                                    RedfsVolumeTrees[i].FlushCacheL0s();
+                                }
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine(e.Message);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         public void shut_down()
         {
             Console.WriteLine("IFSDMux", "Initiating shutdown call");
 
-            Sync();
 
+            Sync();
             m_shutdown = true;
             while (m_shutdown_done_gc == false)
             {
@@ -133,6 +172,8 @@ namespace REDFS_ClusterMode
             }
 
             System.Threading.Thread.Sleep(100);
+            FlushCaches();
+            Sync();
 
             redfsCore.ShutDown();
             Console.WriteLine("IFSDMux", "Finished shutdown call");
@@ -242,7 +283,7 @@ namespace REDFS_ClusterMode
                                 {
                                     RedfsVolumeTrees[i].SyncTree();
                                 }
-                                //do_fsid_sync_internal(i);
+                                do_fsid_sync_internal(i);
                             }
                             catch (Exception e)
                             {
@@ -277,9 +318,9 @@ namespace REDFS_ClusterMode
                         FSIDList[v.volumeId] = redfsCore.redFSPersistantStorage.read_fsid(v.volumeId);
                     }
 
-                    if (v.volumeId > numValidFsids)
+                    if ((v.volumeId+1) > numValidFsids)
                     {
-                        numValidFsids = v.volumeId;
+                        numValidFsids = v.volumeId + 1; //absolute count is required, not 0 based index
                     }
                 }
                 Console.WriteLine("Finished reading all fsids from disk!");
@@ -298,12 +339,12 @@ namespace REDFS_ClusterMode
 
         public Boolean CreateDirectory(int fsid, string path)
         {
-            return RedfsVolumeTrees[fsid].CreateDirectory(FSIDList[fsid], path);
+            return RedfsVolumeTrees[fsid].CreateDirectory(path);
         }
 
         public Boolean CreateFile(int fsid, string path)
         {
-            return RedfsVolumeTrees[fsid].CreateFile(FSIDList[fsid], path);
+            return RedfsVolumeTrees[fsid].CreateFile(path);
         }
     }
 }

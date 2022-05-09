@@ -24,6 +24,7 @@ namespace REDFS_TESTS
          */
         private void InitNewTestContainer(out string containerName)
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "IntroTestTreeCreation_" + id1;
@@ -156,28 +157,28 @@ namespace REDFS_TESTS
             REDFSTree rftree = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1];
             REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
 
-            rftree.CreateDirectory(rfsid, "\\dir1");
-            rftree.CreateDirectory(rfsid, "\\dir2");
+            rftree.CreateDirectory("\\dir1");
+            rftree.CreateDirectory("\\dir2");
 
             for (int i=0;i<100;i++)
             {
                 string newdir = "d" + i + "";
-                rftree.CreateDirectory(rfsid, "\\dir1\\" + newdir);
-                rftree.CreateDirectory(rfsid, "\\dir2\\" + newdir);
+                rftree.CreateDirectory("\\dir1\\" + newdir);
+                rftree.CreateDirectory("\\dir2\\" + newdir);
             }
 
             Assert.IsTrue(rftree.getNumInodesInTree() == (1 + 2 +200));
-            Thread.Sleep(20000);
+            Thread.Sleep(50000);
 
             //Now all of them are cleared out of memory, so the global hashmap inodes[] will have only
             //1 entry left corresponding to the rootDir. rootDirs of all fsids are alwasy in memory.
             rftree.SyncTree();
-            Assert.IsTrue(rftree.getNumInodesInTree() == 3);
+            Assert.AreEqual(rftree.getNumInodesInTree(), 3);
             Assert.IsTrue(rftree.GetInode("\\").isInodeSkeleton == true);
 
             byte[] buffer = new byte[OPS.FS_BLOCK_SIZE];
             int bytesWritten = 0;
-            rftree.CreateFile(rfsid, "\\dir1\\d2\\tempfile.dat");
+            rftree.CreateFile("\\dir1\\d2\\tempfile.dat");
 
             Random r = new Random();
             r.NextBytes(buffer);
@@ -210,6 +211,7 @@ namespace REDFS_TESTS
                 Assert.AreEqual(buffer[i], buffer2[i]);
             }
             Assert.AreEqual(rftree.getNumInodesInTree(), 5);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
             CleanupTestContainer(containerName);
         }
 
@@ -243,12 +245,13 @@ namespace REDFS_TESTS
             REDFSTree rftree = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1];
             REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
 
-            rftree.CreateDirectory(rfsid, "\\dir1");
-            rftree.CreateDirectory(rfsid, "\\dir2");
-            rftree.CreateDirectory(rfsid, "\\dir2\\dir2A");
-            rftree.CreateDirectory(rfsid, "\\dir2\\dir2A\\dir2Ai");
+            rftree.CreateDirectory("\\dir1");
+            rftree.CreateDirectory("\\dir2");
+            rftree.CreateDirectory("\\dir2\\dir2A");
+            rftree.CreateDirectory("\\dir2\\dir2A\\dir2Ai");
 
             rftree.SyncTree();
+            Assert.AreEqual(rftree.getNumInodesInTree(), 5);
 
             rftree.MoveInode(rfsid, "\\dir2\\dir2A\\dir2Ai", "\\dir1\\dir2Aj", false, true);
 

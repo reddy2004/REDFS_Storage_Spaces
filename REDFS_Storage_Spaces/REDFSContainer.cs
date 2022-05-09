@@ -129,10 +129,10 @@ namespace REDFS_ClusterMode
             //using (FileStream sw1 = new FileStream(ci.path, FileMode.OpenOrCreate, FileAccess.Write))
             using (FileStream sw1 = new FileStream(ci.path, FileMode.OpenOrCreate))
             {
-                sw1.SetLength(1024 * 1024 * 1024);
+                sw1.SetLength((long)2 * 1024 * 1024 * 1024);
             }
-            ci.size = 1;
-            ci.freeSpace = 1024;
+            ci.size = 2;
+            ci.freeSpace = 2048;
 
             string chunksFile = containerFolderPath + "\\chunk.files";
             using (StreamWriter sw = new StreamWriter(chunksFile))

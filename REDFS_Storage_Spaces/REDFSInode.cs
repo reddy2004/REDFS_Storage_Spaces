@@ -37,7 +37,7 @@ namespace REDFS_ClusterMode
 
         public string cache_string;
 
-        IDictionary inCoreData = new Dictionary<int, byte[]>();
+        //IDictionary inCoreData = new Dictionary<int, byte[]>();
 
         //Flags specific for directories
         public List<string> items = new List<string>(); //all files/dir names
@@ -95,6 +95,7 @@ namespace REDFS_ClusterMode
                 myWIP.is_dirty = false;
                 isDirty = false;
 
+                fileInfo.Length = myWIP.get_filesize();
                 //throw new SystemException("Not yet implimented!");
             }
             else
@@ -250,8 +251,10 @@ namespace REDFS_ClusterMode
             endoffset = (int)((offset + size) % blocksize);
         }
 
-        public Boolean WriteFile(byte[] buffer, out int bytesWritten, long offset)
+        public Boolean WriteFile(REDFSCore redfsCore, byte[] buffer, out int bytesWritten, long offset)
         {
+            bytesWritten = redfsCore.redfs_write(myWIP, offset, buffer, 0, buffer.Length);
+            /*
             int startfbn, startoffset, endfbn, endoffset;
             ComputeBoundaries(BLK_SIZE, offset, buffer.Length, out startfbn, out startoffset, out endfbn, out endoffset);
 
@@ -267,6 +270,7 @@ namespace REDFS_ClusterMode
                     }
 
                     byte[] data = (byte[])inCoreData[startfbn];
+                    
                     int tocopy = ((BLK_SIZE - startoffset) < buffer.Length) ? (BLK_SIZE - startoffset) : buffer.Length;
                     //Console.WriteLine("[currOffsetInInput, tocopy -> fbn, offsetInFBN ]" + currentBufferOffset + " copy -> " + startfbn + " , " + startoffset);
                     for (int k=0;k<tocopy; k++)
@@ -311,12 +315,16 @@ namespace REDFS_ClusterMode
                 }
             }
             bytesWritten = currentBufferOffset;
+            */
+            isDirty = true;
             touch_inode_obj();
             return true;
         }
 
-        public Boolean ReadFile(byte[] buffer, out int bytesRead, long offset)
+        public Boolean ReadFile(REDFSCore redfsCore, byte[] buffer, out int bytesRead, long offset)
         {
+            bytesRead = redfsCore.redfs_read(myWIP, offset, buffer, 0, buffer.Length);
+            /*
             int startfbn, startoffset, endfbn, endoffset;
             ComputeBoundaries(BLK_SIZE, offset, buffer.Length, out startfbn, out startoffset, out endfbn, out endoffset);
 
@@ -377,6 +385,7 @@ namespace REDFS_ClusterMode
                 }
             }
             bytesRead = currentBufferOffset;
+            */
             touch_inode_obj();
             return true;
         }
@@ -445,6 +454,33 @@ namespace REDFS_ClusterMode
             }
         }
 
+        /*
+         * Walks the tree and releases all non-dirty L0's that are in memory. Return the count
+         * of dirty buffers. Used before shutdown.
+         */ 
+        public int FlushCacheL0s(REDFSCore redfsCore, IDictionary allinodes)
+        {
+            if (isDirectory())
+            {
+                foreach (String item in items)
+                {
+                    string childpath = (parentDirectory == null) ? ("\\" + item) :
+                        (parentDirectory == "\\") ? ("\\" + fileInfo.FileName + "\\" + item) :
+                        (parentDirectory + "\\" + fileInfo.FileName + "\\" + item);
+                    REDFSInode child = (REDFSInode)allinodes[childpath];
+
+                    if (child != null)
+                    {
+                        child.FlushCacheL0s(redfsCore, allinodes);
+                    }
+                }
+            }
+            else
+            {
+                redfsCore.flush_cache(myWIP, true);
+            }
+            return 0;
+        }
         /*
          * Write out all the inmemory data
          * 
@@ -539,11 +575,15 @@ namespace REDFS_ClusterMode
                 redfsCore.flush_cache(myWIP, false);
                 isDirty = false;
             }
-            if (!isDirectory() && isDirty)
+            if (!isDirectory() && (isDirty || myWIP.is_dirty))
             {
+                fileInfo.Length = myWIP.get_filesize();
                 redfsCore.sync(myWIP);
+                redfsCore.redfs_checkin_wip(inowip, myWIP, myWIP.get_ino());
+                isDirty = false;
+                //redfsCore.sync(myWIP);
             }
-            else if (isDirectory() && isDirty && allinodes == null)
+            else if (isDirectory() && (isDirty || myWIP.is_dirty) && allinodes == null)
             {
                 //for testing
                 OnDiskDirectoryInfo oddi = new OnDiskDirectoryInfo();
@@ -597,6 +637,7 @@ namespace REDFS_ClusterMode
                 //File
                 if (age > 20 && isDirty == false && myWIP.is_dirty == false)
                 {
+                    redfsCore.flush_cache(myWIP, false);
                     //remove self
                     allinodes.Remove(fileInfo.FileName);
                     REDFSInode parent = (REDFSInode)allinodes[parentDirectory];
@@ -618,9 +659,10 @@ namespace REDFS_ClusterMode
                 {
                     lock (allinodes)
                     {
-                        string childpath = (parentDirectory == "\\") ? ("\\" + fileInfo.FileName + "\\" + item) :
+                        string childpath = (parentDirectory == null) ? ("\\" + item) :
+                            (parentDirectory == "\\") ? ("\\" + fileInfo.FileName + "\\" + item) :
                             (parentDirectory + "\\" + fileInfo.FileName + "\\" + item);
-                        
+
                         if (allinodes.Contains(childpath))
                         {
                             REDFSInode child = (REDFSInode)allinodes[childpath];
@@ -636,6 +678,7 @@ namespace REDFS_ClusterMode
                     }
                 }
 
+                redfsCore.flush_cache(myWIP, false);
                 lock (allinodes)
                 {
                     if (!isValidNodePresent && fileInfo.FileName != "\\")

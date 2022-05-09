@@ -14,6 +14,7 @@ namespace REDFS_TESTS
         string docFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         private void InitNewTestContainer(out string containerName)
         {
+            REDFS.isTestMode = true;
             ContainerObject co1 = new ContainerObject();
             int id1 = (new Random()).Next();
             co1.containerName = "FPTest_RBA3_" + id1;
@@ -126,7 +127,9 @@ namespace REDFS_TESTS
             }
 
             Thread.Sleep(10000);
-            Assert.AreEqual(dbnsDefault.Length + dbnsMirror.Length + dbnsRaid5.Length, rba1.allocBitMap32TBFile.USED_BLK_COUNT);
+
+            //1 for the fsid
+            Assert.AreEqual(1 + dbnsDefault.Length + dbnsMirror.Length + dbnsRaid5.Length, rba1.allocBitMap32TBFile.USED_BLK_COUNT);
             Assert.AreEqual(2 * OPS.NUM_DBNS_IN_1GB - 200, rba1.GetAvailableBlocksWithType(SPAN_TYPE.DEFAULT));
             Assert.AreEqual(2 * OPS.NUM_DBNS_IN_1GB - 200, rba1.GetAvailableBlocksWithType(SPAN_TYPE.MIRRORED));
             Assert.AreEqual(4 * OPS.NUM_DBNS_IN_1GB - 400, rba1.GetAvailableBlocksWithType(SPAN_TYPE.RAID5));
@@ -140,7 +143,8 @@ namespace REDFS_TESTS
 
             REDFSBlockAllocator rba_t = REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator;
 
-            Assert.AreEqual(dbnsDefault.Length + dbnsMirror.Length + dbnsRaid5.Length, rba_t.allocBitMap32TBFile.USED_BLK_COUNT);
+            //1 for fsid
+            Assert.AreEqual(1+ dbnsDefault.Length + dbnsMirror.Length + dbnsRaid5.Length, rba_t.allocBitMap32TBFile.USED_BLK_COUNT);
             Assert.AreEqual(2 * OPS.NUM_DBNS_IN_1GB - 200, rba_t.GetAvailableBlocksWithType(SPAN_TYPE.DEFAULT));
             Assert.AreEqual(2 * OPS.NUM_DBNS_IN_1GB - 200, rba_t.GetAvailableBlocksWithType(SPAN_TYPE.MIRRORED));
             Assert.AreEqual(4 * OPS.NUM_DBNS_IN_1GB - 400, rba_t.GetAvailableBlocksWithType(SPAN_TYPE.RAID5));

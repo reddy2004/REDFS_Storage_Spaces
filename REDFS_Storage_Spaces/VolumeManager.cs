@@ -200,6 +200,9 @@ namespace REDFS_ClusterMode
             SaveVolumeListToDisk();
         }
 
+        /*
+         * Dummy test function
+         */ 
         public void CreateZeroVolume(string newVolumeName)
         {
             maxVolumeId++;
@@ -223,7 +226,8 @@ namespace REDFS_ClusterMode
             if (HasSnapshotAlready(parentVolumeId))
             {
                 Console.WriteLine("Cannot create snapshot as this volume has snapshots already, Try raw cloning instead");
-                throw new SystemException();
+                //throw new SystemException();
+                return;
             }
 
             Boolean found = false;
@@ -272,7 +276,19 @@ namespace REDFS_ClusterMode
                     //for test case to pass
                     if (REDFS.redfsContainer != null)
                     {
-                        int volid = REDFS.redfsContainer.ifsd_mux.CreateAndInitNewFSIDFromRootVolume();
+                        int volid = -1;
+                        if (parentVolumeId == 0)
+                        {
+                            volid = REDFS.redfsContainer.ifsd_mux.CreateAndInitNewFSIDFromRootVolume();
+                            DEFS.ASSERT(volid == REDFS.redfsContainer.ifsd_mux.numValidFsids -1, "zero index volid should concur to fsid");
+                        }
+                        else
+                        {
+                            RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[parentVolumeId];
+                            volid = REDFS.redfsContainer.ifsd_mux.CreateNewFSIDFromExistingFSID(rfsid);
+                            DEFS.ASSERT(volid == REDFS.redfsContainer.ifsd_mux.numValidFsids - 1, "zero index volid should concur to fsid");
+                        }
+                        DEFS.ASSERT(volid > maxVolumeId, "We should've created a new volume by now!");
                         maxVolumeId = volid;
                     }
                     else
@@ -296,7 +312,7 @@ namespace REDFS_ClusterMode
                         v.hexcolor = volume.hexcolor;
                     }
 
-                    maxVolumeId++;
+                    //maxVolumeId++;
                     break;
                 }
             }
