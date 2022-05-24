@@ -37,8 +37,6 @@ namespace REDFS_ClusterMode
 
         public string cache_string;
 
-        //IDictionary inCoreData = new Dictionary<int, byte[]>();
-
         //Flags specific for directories
         public List<string> items = new List<string>(); //all files/dir names
         public Boolean isInodeSkeleton = false;
@@ -66,11 +64,6 @@ namespace REDFS_ClusterMode
             parentDirectory = parent;
 
             m_creation_time = DateTime.Now.ToUniversalTime().Ticks;
-            /*
-            if (name.Length >= 2 && name.Length <= 4 && name.IndexOf("d") == 0) { }
-            else {
-                DEFS.ASSERT(name == "\\" || name.IndexOf("\\") < 0, "Incorrect name in filename: " + name);
-            }*/
         }
 
         public int get_inode_obj_age()
@@ -86,6 +79,12 @@ namespace REDFS_ClusterMode
 
         public void LoadWipForExistingInode(REDFSCore redfsCore, RedFS_Inode inowip, int ino, int pino)
         {
+            if (myWIP != null && (myWIP.m_ino != 0  || myWIP.is_dirty == true))
+            {
+                Console.WriteLine("appears wip is already in memory!" + ino + ", p=" + pino);
+                return;
+            }
+
             if (fileInfo.Attributes.HasFlag(FileAttributes.Normal))
             {
                 myWIP = new RedFS_Inode(WIP_TYPE.REGULAR_FILE, ino, pino);
@@ -254,68 +253,6 @@ namespace REDFS_ClusterMode
         public Boolean WriteFile(REDFSCore redfsCore, byte[] buffer, out int bytesWritten, long offset)
         {
             bytesWritten = redfsCore.redfs_write(myWIP, offset, buffer, 0, buffer.Length);
-            /*
-            int startfbn, startoffset, endfbn, endoffset;
-            ComputeBoundaries(BLK_SIZE, offset, buffer.Length, out startfbn, out startoffset, out endfbn, out endoffset);
-
-            int currentBufferOffset = 0;
-
-            for (int fbn = startfbn; fbn <= endfbn; fbn++)
-            {
-                if (fbn == startfbn)
-                {
-                    if (!inCoreData.Contains(startfbn))
-                    {
-                        inCoreData.Add(startfbn, new byte[BLK_SIZE]);
-                    }
-
-                    byte[] data = (byte[])inCoreData[startfbn];
-                    
-                    int tocopy = ((BLK_SIZE - startoffset) < buffer.Length) ? (BLK_SIZE - startoffset) : buffer.Length;
-                    //Console.WriteLine("[currOffsetInInput, tocopy -> fbn, offsetInFBN ]" + currentBufferOffset + " copy -> " + startfbn + " , " + startoffset);
-                    for (int k=0;k<tocopy; k++)
-                    {
-                        data[k + startoffset] = buffer[k + currentBufferOffset];
-                    }
-                    currentBufferOffset += tocopy;
-                }
-                else if (fbn == endfbn)
-                {
-                    if (!inCoreData.Contains(endfbn))
-                    {
-                        inCoreData.Add(endfbn, new byte[BLK_SIZE]);
-                    }
-
-                    byte[] data = (byte[])inCoreData[endfbn];
-                    int tocopy = endoffset;
-                    //Console.WriteLine("[currOffsetInInput, tocopy -> fbn, offsetInFBN ]" + currentBufferOffset + " copy -> " + endoffset + " , " + 0);
-
-                    for (int k = 0; k < tocopy; k++)
-                    {
-                        data[k] = buffer[k + currentBufferOffset];
-                    }
-                    currentBufferOffset += tocopy;
-                }
-                else
-                {
-                    //proper BLK_SIZE size copy
-                    if (!inCoreData.Contains(fbn))
-                    {
-                        inCoreData.Add(fbn, new byte[BLK_SIZE]);
-                    }
-
-                    byte[] data = (byte[])inCoreData[fbn];
-                    //Console.WriteLine("[currOffsetInInput, tocopy -> fbn, offsetInFBN ]" + currentBufferOffset + " copy -> " + fbn + " , " +  0);
-
-                    for (int k = 0; k < BLK_SIZE; k++)
-                    {
-                        data[k] = buffer[k + currentBufferOffset];
-                    }
-                    currentBufferOffset += BLK_SIZE;
-                }
-            }
-            bytesWritten = currentBufferOffset;
-            */
             isDirty = true;
             touch_inode_obj();
             return true;
@@ -324,68 +261,6 @@ namespace REDFS_ClusterMode
         public Boolean ReadFile(REDFSCore redfsCore, byte[] buffer, out int bytesRead, long offset)
         {
             bytesRead = redfsCore.redfs_read(myWIP, offset, buffer, 0, buffer.Length);
-            /*
-            int startfbn, startoffset, endfbn, endoffset;
-            ComputeBoundaries(BLK_SIZE, offset, buffer.Length, out startfbn, out startoffset, out endfbn, out endoffset);
-
-            int currentBufferOffset = 0;
-
-            for (int fbn = startfbn; fbn <= endfbn; fbn++)
-            {
-                if (fbn == startfbn)
-                {
-                    //return 0's if its not present incore
-                    if (!inCoreData.Contains(startfbn))
-                    {
-                        inCoreData.Add(startfbn, new byte[BLK_SIZE]);
-                    }
-
-                    byte[] data = (byte[])inCoreData[startfbn];
-                    int tocopy = ((BLK_SIZE - startoffset) < buffer.Length) ? (BLK_SIZE - startoffset) : buffer.Length;
-                    //Console.WriteLine("[currOffsetInInput, tocopy -> fbn, offsetInFBN ]" + currentBufferOffset + " copy -> " + startfbn + " , " + startoffset);
-                    for (int k = 0; k < tocopy; k++)
-                    {
-                        buffer[k + currentBufferOffset] = data[k + startoffset];
-                    }
-                    currentBufferOffset += tocopy;
-                }
-                else if (fbn == endfbn)
-                {
-                    if (!inCoreData.Contains(endfbn))
-                    {
-                        inCoreData.Add(endfbn, new byte[BLK_SIZE]);
-                    }
-
-                    byte[] data = (byte[])inCoreData[endfbn];
-                    int tocopy = endoffset;
-                    //Console.WriteLine("[currOffsetInInput, tocopy -> fbn, offsetInFBN ]" + currentBufferOffset + " copy -> " + endoffset + " , " + 0);
-
-                    for (int k = 0; k < tocopy; k++)
-                    {
-                        buffer[k + currentBufferOffset] = data[k];
-                    }
-                    currentBufferOffset += tocopy;
-                }
-                else
-                {
-                    //proper 8k size copy
-                    if (!inCoreData.Contains(fbn))
-                    {
-                        inCoreData.Add(fbn, new byte[BLK_SIZE]);
-                    }
-
-                    byte[] data = (byte[])inCoreData[fbn];
-                    //Console.WriteLine("[currOffsetInInput, tocopy -> fbn, offsetInFBN ]" + currentBufferOffset + " copy -> " + fbn + " , " + 0);
-
-                    for (int k = 0; k < BLK_SIZE; k++)
-                    {
-                        buffer[k + currentBufferOffset] = data[k];
-                    }
-                    currentBufferOffset += BLK_SIZE;
-                }
-            }
-            bytesRead = currentBufferOffset;
-            */
             touch_inode_obj();
             return true;
         }
@@ -526,12 +401,6 @@ namespace REDFS_ClusterMode
                             {
                                 child.SyncInternal(inowip, redfsCore, allinodes);
                             }
-
-                            //OnDiskInodeInfo odii = new OnDiskInodeInfo();
-                            //odii.fileInfo = child.fileInfo;
-                            //odii.ino = child.myWIP.get_ino();
-
-                            //oddi.inodes.Add(odii);
                         }
                     }
                 }

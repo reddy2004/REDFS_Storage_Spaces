@@ -10,6 +10,12 @@ using System.Threading;
 
 namespace REDFS_ClusterMode
 {
+    public class MetricsSummaryOutput
+    {
+        //JSON strings, must be extracted and parsed to json again on client side.
+        public string dokan;
+        public string core;
+    }
     public class GenericSuccessReply
     {
         public string result = "SUCCESS";
@@ -186,10 +192,13 @@ namespace REDFS_ClusterMode
                 {
                     if (isUserValid)
                     {
-                        String jsonData = DokanSideMetrics.GetJSONDump();
-                        //String jsonData = TestMetrics.GetJSONDump();
-                        byte[] data = Encoding.UTF8.GetBytes(jsonData);
-                        await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                        MetricsSummaryOutput mso = new MetricsSummaryOutput();
+                        mso.dokan = DokanSideMetrics.GetJSONDump();
+                        mso.core = REDFSCoreSideMetrics.GetJSONDump();
+
+                        string  output_str = JsonConvert.SerializeObject(mso, Formatting.None);
+                        byte[] output = Encoding.UTF8.GetBytes(output_str);
+                        await resp.OutputStream.WriteAsync(output, 0, output.Length);
                     }
                     resp.Close();
                 }

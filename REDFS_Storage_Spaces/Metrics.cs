@@ -18,6 +18,9 @@ namespace REDFS_ClusterMode
         DOKAN_CALLS,
         LOGICAL_DATA,
         PHYSICAL_DATA,
+        DBN_ALLOC_MS,
+        WRITE_LATENCY_MS,
+        READ_LATENCY_MS,
         LAST
     }
 
@@ -62,7 +65,7 @@ namespace REDFS_ClusterMode
             {
                 if ((i == (int)METRIC_NAME.READ_KILOBYTES) || (i == (int)METRIC_NAME.WRITE_KILOBYTES))
                 {
-                    AverageValues[i] = (int)CurrentMetricCounters[i]/ (1024);
+                    AverageValues[i] = (int)CurrentMetricCounters[i] / (1024);
                 }
                 else if (i == (int)METRIC_NAME.DOKAN_CALLS)
                 {
@@ -70,7 +73,11 @@ namespace REDFS_ClusterMode
                 }
                 else if ((i == (int)METRIC_NAME.LOGICAL_DATA) || (i == (int)METRIC_NAME.PHYSICAL_DATA))
                 {
-                    AverageValues[i] = (CurrentMetricSamples[i] > 0) ? (int)((CurrentMetricCounters[i] / CurrentMetricSamples[i]) / (1024*1024)) : 0;
+                    AverageValues[i] = (CurrentMetricSamples[i] > 0) ? (int)((CurrentMetricCounters[i] / CurrentMetricSamples[i]) / (1024 * 1024)) : 0;
+                }
+                else if ((i == (int)METRIC_NAME.DBN_ALLOC_MS) || (i == (int)METRIC_NAME.WRITE_LATENCY_MS) || (i == (int)METRIC_NAME.READ_LATENCY_MS))
+                {
+                    AverageValues[i] = (CurrentMetricSamples[i] > 0) ? (int)((CurrentMetricCounters[i] / CurrentMetricSamples[i])) : 0;
                 }
                 else
                 {
@@ -253,6 +260,22 @@ namespace REDFS_ClusterMode
             return m.GetJSONDump();
         }
     }
+
+    public static class REDFSCoreSideMetrics
+    {
+        public static Metrics m = new Metrics();
+
+        public static void init()
+        {
+            m.init();
+        }
+
+        public static string GetJSONDump()
+        {
+            return m.GetJSONDump();
+        }
+    }
+
 
     static class Logger
     {

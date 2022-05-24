@@ -57,6 +57,9 @@ namespace REDFS_ClusterMode
 
             RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("CTreeinit");
             DEFS.ASSERT(inowip.get_filesize() == (long)128 * 1024 * 1024 * 1024, "inowip size mismatch " + inowip.get_filesize());
+
+            PrintableWIP pwip = redfsCoreLocalCopy.redfs_list_tree(inowip);
+
             redfsCoreLocalCopy.redfs_checkin_wip(inowip, wip, wip.get_ino()); //just commit some basic wip 
 
             //Write out the oddi data after loading the wip we just wrote
@@ -70,8 +73,10 @@ namespace REDFS_ClusterMode
             redfsCoreLocalCopy.sync(inowip);
             redfsCoreLocalCopy.flush_cache(inowip, false);
 
+            
+
             long rootDirSize = ((REDFSInode)inodes["\\"]).myWIP.get_filesize();
-            DEFS.ASSERT(0 != rootDirSize, "Created a wip for a new rootdir in new fsid, but size is ro zero!");
+            DEFS.ASSERT(0 != rootDirSize, "Created a wip for a new rootdir in new fsid, but size is zero! " + rootDirSize);
 
             //test
             byte[] buffer = new byte[rootDirSize];
@@ -236,7 +241,9 @@ namespace REDFS_ClusterMode
         {
             if (inodes.Contains(fullPath))
             {
-                return (REDFSInode)inodes[fullPath];
+                REDFSInode rfi = (REDFSInode)inodes[fullPath];
+                DEFS.ASSERT(rfi.myWIP != null & rfi.myWIP.m_ino != 0, "The wip is absent or its not loaded correctly");
+                return rfi;
             }
             else
             {
@@ -716,7 +723,10 @@ namespace REDFS_ClusterMode
             if (LoadInode(fileName))
             {
                 REDFSInode rfi = (REDFSInode)inodes[fileName];
-                return rfi.WriteFile(redfsCoreLocalCopy, buffer, out bytesWritten, offset);
+                lock (rfi)
+                {
+                    return rfi.WriteFile(redfsCoreLocalCopy, buffer, out bytesWritten, offset);
+                }
             }
             else
             {
@@ -729,7 +739,11 @@ namespace REDFS_ClusterMode
         {
             if (LoadInode(fileName))
             {
-                return ((REDFSInode)inodes[fileName]).ReadFile(redfsCoreLocalCopy, buffer, out bytesRead, offset);
+                REDFSInode inoobj = (REDFSInode)inodes[fileName];
+                lock (inoobj)
+                {
+                    return inoobj.ReadFile(redfsCoreLocalCopy, buffer, out bytesRead, offset);
+                }
             }
             else
             {
@@ -740,7 +754,7 @@ namespace REDFS_ClusterMode
 
         private Boolean LoadInode(string fullPath)
         {
-            if (inodes[fullPath] == null)
+            if (inodes[fullPath] == null || ((((REDFSInode)inodes[fullPath]).myWIP == null) || ((REDFSInode)inodes[fullPath]).myWIP.m_ino == 0 ))
             {
                 REDFSInode ino = (REDFSInode)GetInode(fullPath);
                 return (ino != null);

@@ -185,7 +185,7 @@ namespace REDFS_ClusterMode
         private void W_GCThreadMux()
         {
             Console.WriteLine("IFSDMux : Starting gc/sync thread (Mux)...");
-            int next_wait = 1000;
+            int next_wait = 3000;
 
             while (true)
             {

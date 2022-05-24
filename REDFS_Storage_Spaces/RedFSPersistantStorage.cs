@@ -154,7 +154,7 @@ namespace REDFS_ClusterMode
                     fpt.dbn = dbn;
                     fpt.cnt = (int)clogfile.Position;
 
-                    byte[] hash = md5.ComputeHash(buffer, offset, 4096);
+                    byte[] hash = md5.ComputeHash(buffer, offset, OPS.FS_BLOCK_SIZE);
                     for (int i = 0; i < 16; i++)
                     {
                         fpt.fp[i] = hash[i];

@@ -27,6 +27,7 @@ namespace REDFS_ClusterMode
         void data_to_buf(byte[] data);
         byte[] buf_to_data(); /* for reading into, and out*/
         long get_ondisk_dbn();
+        void set_ondisk_dbn(long dbn);
 
         long get_start_fbn();
         void set_start_fbn(long fbn);
@@ -46,6 +47,8 @@ namespace REDFS_ClusterMode
 
         //For comparision
         public Boolean Equals(Red_Buffer other);
+
+        public void touch();
     }
 
 
@@ -166,6 +169,8 @@ namespace REDFS_ClusterMode
         }
         byte[] Red_Buffer.buf_to_data() { return data; }
         long Red_Buffer.get_ondisk_dbn() { return m_dbn; }
+        void Red_Buffer.set_ondisk_dbn(long dbn) {m_dbn = dbn;}
+
         long Red_Buffer.get_start_fbn() { return m_start_fbn; }
         void Red_Buffer.set_start_fbn(long fbn) { m_start_fbn = fbn; }
         void Red_Buffer.set_dirty(bool flag) { is_dirty = flag; }
@@ -176,7 +181,7 @@ namespace REDFS_ClusterMode
         bool Red_Buffer.get_touchrefcnt_needed() { return needtouchbuf; }
         void Red_Buffer.set_touchrefcnt_needed(bool v) { needtouchbuf = v; }
 
-        public void touch() { creation_time = DateTime.Now.ToUniversalTime().Ticks; }
+        void Red_Buffer.touch() { creation_time = DateTime.Now.ToUniversalTime().Ticks; }
         public bool isTimetoClear()
         {
             long curr = DateTime.Now.ToUniversalTime().Ticks;
@@ -197,7 +202,7 @@ namespace REDFS_ClusterMode
             m_dbn = 0;
             m_exists_ondisk = false;
             mTimeToLive = 1;
-            Array.Clear(data, 0, 4096);
+            Array.Clear(data, 0, OPS.FSID_BLOCK_SIZE);
         }
 
         public Boolean Equals(Red_Buffer other1)
@@ -258,6 +263,7 @@ namespace REDFS_ClusterMode
         }
         byte[] Red_Buffer.buf_to_data() { return data; }
         long Red_Buffer.get_ondisk_dbn() { return m_dbn; }
+        void Red_Buffer.set_ondisk_dbn(long dbn) { m_dbn = dbn; }
         long Red_Buffer.get_start_fbn() { return m_start_fbn; }
         void Red_Buffer.set_start_fbn(long fbn) { m_start_fbn = fbn; }
         void Red_Buffer.set_dirty(bool flag) { is_dirty = flag; }
@@ -268,7 +274,7 @@ namespace REDFS_ClusterMode
         bool Red_Buffer.get_touchrefcnt_needed() { return needtouchbuf; }
         void Red_Buffer.set_touchrefcnt_needed(bool v) { needtouchbuf = v; }
 
-        public void touch() { creation_time = DateTime.Now.ToUniversalTime().Ticks; }
+        void Red_Buffer.touch() { creation_time = DateTime.Now.ToUniversalTime().Ticks; }
         public bool isTimetoClear()
         {
             long curr = DateTime.Now.ToUniversalTime().Ticks;
@@ -359,6 +365,8 @@ namespace REDFS_ClusterMode
         }
         byte[] Red_Buffer.buf_to_data() { return data; }
         long Red_Buffer.get_ondisk_dbn() { return m_dbn; }
+
+        void Red_Buffer.set_ondisk_dbn(long dbn) { m_dbn = dbn; }
         long Red_Buffer.get_start_fbn() { return m_start_fbn; }
         void Red_Buffer.set_start_fbn(long fbn) { m_start_fbn = fbn; }
         void Red_Buffer.set_dirty(bool flag) { is_dirty = flag; }
@@ -369,7 +377,7 @@ namespace REDFS_ClusterMode
         bool Red_Buffer.get_touchrefcnt_needed() { return needtouchbuf; }
         void Red_Buffer.set_touchrefcnt_needed(bool v) { needtouchbuf = v; }
 
-        public void touch() { creation_time = DateTime.Now.ToUniversalTime().Ticks; }
+        void Red_Buffer.touch() { creation_time = DateTime.Now.ToUniversalTime().Ticks; }
         public bool isTimetoClear()
         {
             long curr = DateTime.Now.ToUniversalTime().Ticks;

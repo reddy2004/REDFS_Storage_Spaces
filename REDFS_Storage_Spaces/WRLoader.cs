@@ -373,12 +373,12 @@ namespace REDFS_ClusterMode
             //Parent of inowip is always -1.
             RedFS_Inode wip = new RedFS_Inode(WIP_TYPE.REGULAR_FILE, 0, -1);
             
-            byte[] buf = new byte[128];
+            byte[] buf = new byte[OPS.WIP_SIZE];
 
             //32 entries in inode block
-            for (int i = 0; i < 32; i++)
+            for (int i = 0; i < OPS.NUM_WIPS_IN_BLOCK; i++)
             {
-                for (int t = 0; t < 128; t++) buf[t] = buffer[i * 128 + t];
+                for (int t = 0; t < OPS.WIP_SIZE; t++) buf[t] = buffer[i * OPS.WIP_SIZE + t];
                 wip.parse_bytes(buf);
 
                 BLK_TYPE type = BLK_TYPE.IGNORE;
@@ -653,6 +653,7 @@ namespace REDFS_ClusterMode
 
         /*
          * Using the input as start_dbn and end_dbn so that caller is aware that its a contigious list
+         * Must not span two rbn obviously, read the code
          */
         public void get_refcount_batch(long start_dbn, long end_dbn, int[] refcnt, int[] childcnt)
         {
@@ -661,11 +662,13 @@ namespace REDFS_ClusterMode
             UpdateReqI rStart = new UpdateReqI();
             rStart.optype = REFCNT_OP.GET_REFANDCHD_INFO;
             rStart.dbn = start_dbn;
+            rStart.who = "get_refcount_batch(" + start_dbn + "," + end_dbn + ") start";
             GLOBALQ.m_reqi_queue.Add(rStart);
 
             UpdateReqI rEnd = new UpdateReqI();
             rEnd.optype = REFCNT_OP.GET_REFANDCHD_INFO;
             rEnd.dbn = end_dbn;
+            rEnd.who = "get_refcount_batch(" + start_dbn + "," + end_dbn + ") end";
             GLOBALQ.m_reqi_queue.Add(rEnd);
 
             while (rStart.processed == false || rEnd.processed == false)
@@ -687,6 +690,7 @@ namespace REDFS_ClusterMode
             UpdateReqI r = new UpdateReqI();
             r.optype = REFCNT_OP.GET_REFANDCHD_INFO;
             r.dbn = dbn;
+            r.who = "get_refcount(" + dbn + ")";
             GLOBALQ.m_reqi_queue.Add(r);
 
             int rbn = REFDEF.dbn_to_rbn(dbn);
@@ -732,6 +736,11 @@ namespace REDFS_ClusterMode
                     optype == REFCNT_OP.BATCH_INCREMENT_REFCOUNT_ALLOC, "Wrong param in mod_refcount");
 
             DEFS.ASSERT(isinodefilel0 || (wb == null || wb.get_level() > 0), "wrong type to mod_refcount " + isinodefilel0 + (wb == null));
+
+            if (dbn > 10000000) //for sake of testing
+            {
+                Console.WriteLine("Catching for debug");
+            }
 
             UpdateReqI r = new UpdateReqI();
             r.optype = optype;
@@ -781,6 +790,7 @@ namespace REDFS_ClusterMode
                         r.dbn + ", and operation = " + r.optype + ", transaction offset : " + r.tfbn);
             }
 
+            r.who = "mod_refcnt (fsid:" + fsid + ", dbn:"+ dbn + ",optype:" + optype.ToString() + ",wb:" + (wb == null) + ",isinodefileL0:" + isinodefilel0 + ")";
             GLOBALQ.m_reqi_queue.Add(r);
         }
     }

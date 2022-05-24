@@ -781,9 +781,25 @@ namespace REDFS_ClusterMode
                     }
                 }
 
-                spanFile.Seek(0, SeekOrigin.Begin);
-                spanFile.Write(spanFileSyncRAWData);
-                spanFile.Flush();
+                if (REDFS.isTestMode)
+                {
+                    try
+                    {
+                        spanFile.Seek(0, SeekOrigin.Begin);
+                        spanFile.Write(spanFileSyncRAWData);
+                        spanFile.Flush();
+                    }
+                    catch (IOException e)
+                    {
+                        Console.WriteLine("Catch error");
+                    }
+                }
+                else
+                {
+                    spanFile.Seek(0, SeekOrigin.Begin);
+                    spanFile.Write(spanFileSyncRAWData);
+                    spanFile.Flush();
+                }
                 isDirty = false;
             }
         }
@@ -975,16 +991,24 @@ namespace REDFS_ClusterMode
          */ 
         public DBNSegmentSpan GetDBNSegmentSpan(long start_dbn)
         {
-            if (isSpanMapOkay())
+            try
             {
-                int segmentOffset = DBNSegmentSpan.GetDBNSpaceSegmentOffset(start_dbn);
-                Console.WriteLine("seg offset = " + segmentOffset + " for " + start_dbn);
-                if (startDBNToDBNSegmentSpan[segmentOffset] != null)
+                if (isSpanMapOkay())
                 {
-                    return startDBNToDBNSegmentSpan[segmentOffset];
+                    int segmentOffset = DBNSegmentSpan.GetDBNSpaceSegmentOffset(start_dbn);
+                    Console.WriteLine("seg offset = " + segmentOffset + " for " + start_dbn);
+                    if (startDBNToDBNSegmentSpan[segmentOffset] != null)
+                    {
+                        return startDBNToDBNSegmentSpan[segmentOffset];
+                    }
                 }
+                throw new Exception("Span not okay! or we didnt find anything for " + start_dbn);
             }
-            throw new SystemException();
+            catch (Exception e)
+            {
+                Console.WriteLine("FATAL: "  + e.Message);
+                throw new SystemException();
+            }
         }
 
         //Lets return a representation object, say json, so that we can have compare tests

@@ -18,3 +18,8 @@ Unmount container from webui causing fatal - not all bufs are recovered.
 
 Files are becoming zero sized after container unmount/remount
 volume id not being assigned correctly
+
+
+Add autoload script as json input to reduce testing time.
+
+when loading a volume for first time, the dir read does not load wips correctly. add a flag in wip to make sure its loaded or check for ino=0

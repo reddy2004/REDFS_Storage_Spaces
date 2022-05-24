@@ -328,8 +328,8 @@ namespace REDFS_ClusterMode
         }
 
         /*
-        * Scans the given 4k buffer, and returns the offset of a free bit.
-        * offset can vary between 0 and 4096*8
+        * Scans the given 8k buffer, and returns the offset of a free bit.
+        * offset can vary between 0 and 8192*8
         */
         public int get_free_bitoffset(int startsearchoffset, byte[] data)
         {
@@ -542,6 +542,7 @@ namespace REDFS_ClusterMode
                 for (int i = 0; i < OPS.NUML0(wip.get_filesize()); i++)
                 {
                     long dbnl0 = wip.get_child_dbn(i);
+                    DEFS.ASSERT(dbnl0 != DBN.INVALID, "Invalid dbn found in valid dbn range!");
                     redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbnl0);
                 }
             }
@@ -556,10 +557,12 @@ namespace REDFS_ClusterMode
                     while (counter > 0 && idx < 1024)
                     {
                         long dbnl0 = wbl1.get_child_dbn(idx);
+                        DEFS.ASSERT(dbnl0 != DBN.INVALID, "Invalid dbn found in valid dbn range!");
                         redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbnl0);
                         counter--;
                         idx++;
                     }
+                    DEFS.ASSERT(wbl1.m_dbn != DBN.INVALID, "Invalid dbn found in valid dbn range!");
                     redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wbl1.m_dbn);
                 }
             }
@@ -583,10 +586,12 @@ namespace REDFS_ClusterMode
                         while (counter > 0 && idx < OPS.FS_SPAN_OUT)
                         {
                             long dbnl0 = wbl1.get_child_dbn(idx);
+                            DEFS.ASSERT(dbnl0 != DBN.INVALID, "Invalid dbn found in valid dbn range!");
                             redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbnl0);
                             counter--;
                             idx++;
                         }
+                        DEFS.ASSERT(wbl1.m_dbn != DBN.INVALID, "Invalid dbn found in valid dbn range!");
                         redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wbl1.m_dbn);
                     }
 
@@ -614,7 +619,7 @@ namespace REDFS_ClusterMode
                 {
                     if (wip.m_ino == 0 || wip.m_ino == 1)
                     {
-                        redfs_grow_wip_internal_superfast2(wip, newsize, false);
+                        redfs_grow_wip_internal_superfast2(wip, newsize, fsid == 0);
                     }
                     else
                     {
@@ -950,7 +955,7 @@ namespace REDFS_ClusterMode
 
             RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(wip, 1, fbn, true);
 
-            if (wbl1.m_dbn != 0)
+            if (!wbl1.is_dirty &&  wbl1.needdbnreassignment && wbl1.m_dbn != 0 && wbl1.m_dbn != DBN.INVALID)
             {
                 redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wbl1.m_dbn);
             }
@@ -975,6 +980,13 @@ namespace REDFS_ClusterMode
             int idx = OPS.myidx_in_myparent(0, fbn);
             long dbn0 = wbl1.get_child_dbn(idx);
 
+            if (dbn0 > 1000000)
+            {
+                
+                PrintableWIP pwip = redfs_list_tree(wip);
+                long filesize = wip.get_filesize();
+                Console.WriteLine("For debug! fszie =" + filesize);
+            }
             if (dbn0 != 0 && dbn0 != DBN.INVALID)
             {
                 redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbn0);
@@ -1000,7 +1012,7 @@ namespace REDFS_ClusterMode
             DEFS.ASSERT(wb.get_dbn_reassignment_flag() == true, "Wrong call");
 
             //refcntmgr.decrement_refcount(wb, isinofileL0);
-            if (wb.get_ondisk_dbn() != 0)
+            if (wb.get_ondisk_dbn() != 0 && wb.get_ondisk_dbn() != DBN.INVALID)
             {
                 redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wb.get_ondisk_dbn());
             }
@@ -1113,8 +1125,11 @@ namespace REDFS_ClusterMode
 
             if (wip.get_filesize() < (fileoffset + blength))
             {
-                DEFS.ASSERT(wip.get_ino() == 0 || type == REDFS_OP.REDFS_WRITE, "Cannot grow wip for " +
-                        "read operations, except for inofile. wip.ino = " + wip.get_ino() + " and type = " + type);
+                //DEFS.ASSERT(wip.get_ino() == 0 || type == REDFS_OP.REDFS_WRITE, "Cannot grow wip for " +
+                //        "read operations, except for inofile. wip.ino = " + wip.get_ino() + " and type = " + type + " and size " +
+                //        wip.get_filesize() + " to " + (fileoffset + blength));
+                //hacky
+                //blength = (int)( wip.get_filesize() - fileoffset);
                 redfs_resize_wip(wip.get_filefsid(), wip, (fileoffset + blength), false);
             }
 
@@ -1165,19 +1180,6 @@ namespace REDFS_ClusterMode
 
                 RedBufL0 wbl0 = (RedBufL0)redfs_load_buf(wip, 0, fbn, type == REDFS_OP.REDFS_WRITE);
 
-                /*
-                for (int i = 0; i < copylength; i++)
-                {
-                    if (type == REDFS_OP.REDFS_WRITE)
-                    {
-                        wbl0.data[wboffset++] = buffer[buffer_start++];
-                    }
-                    else
-                    {
-                        buffer[buffer_start++] = wbl0.data[wboffset++];
-                    }
-                }
-                */
                 if (type == REDFS_OP.REDFS_WRITE)
                 {
                     Array.Copy(buffer, buffer_start, wbl0.data, wboffset, copylength);
@@ -1397,8 +1399,17 @@ namespace REDFS_ClusterMode
                     }
                     else
                     {
+                        int numL0sRemaining = (OPS.NUML0(newsize) - (OPS.FS_SPAN_OUT * i));
+                        int numL0 = (numL0sRemaining > OPS.FS_SPAN_OUT) ? OPS.FS_SPAN_OUT : numL0sRemaining;
+
                         RedBufL1 wbl1 = (RedBufL1)redfs_allocate_buffer(wip, BLK_TYPE.REGULAR_FILE_L1, i * OPS.FS_SPAN_OUT, false, Array.Empty<long>(), 0);
+                        for (int k=0;k<numL0;k++)
+                        {
+                            wbl1.set_child_dbn(k, 0);
+                        }
                         wip.set_child_dbn(i, wbl1.m_dbn);
+                        wip.L1list.Add(wbl1);
+                        wbl1.is_dirty = true;
                     }
                 } 
                 else
@@ -1409,8 +1420,18 @@ namespace REDFS_ClusterMode
                     }
                     else
                     {
+                        int numL1sRemaining = (OPS.NUML1(newsize) - (OPS.FS_SPAN_OUT * i));
+                        int numL1 = (numL1sRemaining > OPS.FS_SPAN_OUT) ? OPS.FS_SPAN_OUT : numL1sRemaining;
+
                         RedBufL2 wbl2 = (RedBufL2)redfs_allocate_buffer(wip, BLK_TYPE.REGULAR_FILE_L2, i * OPS.FS_SPAN_OUT * OPS.FS_SPAN_OUT, false, Array.Empty<long>(), 0);
+                        
+                        for (int k=0;k<numL1;k++)
+                        {
+                            wbl2.set_child_dbn(k, 0);
+                        }
                         wip.set_child_dbn(i, wbl2.m_dbn);
+                        wip.L2list.Add(wbl2);
+                        wbl2.is_dirty = true;
                     }
                 }
             }
@@ -1707,16 +1728,18 @@ namespace REDFS_ClusterMode
         //
         private Red_Buffer redfs_load_buf(RedFS_Inode wip, int level, long someL0fbn, bool forwrite)
         {
-            
             Red_Buffer ret = (Red_Buffer)get_buf3("WLB", wip, level, someL0fbn, true);
+            
             if (ret != null)
             {
+                ret.touch();
                 return ret;
             }
 
-            if (wip.m_ino == 0)
+            if (wip.m_ino == 0 && level == 0)
             {
                 Console.WriteLine("inowip");
+                //PrintableWIP pwip =  redfs_list_tree(wip);
             }
 
             if (level == 2)
@@ -1732,6 +1755,11 @@ namespace REDFS_ClusterMode
 
                     RedBufL2 wbl2 = (RedBufL2)redfs_allocate_buffer(wip, BLK_TYPE.REGULAR_FILE_L2, start_fbnl2, true, Array.Empty<long>(), 0);
                     wbl2.m_dbn = dbnl2;
+
+                    if (dbnl2 > 1000000)
+                    {
+                        Console.WriteLine("Catch debug here!");
+                    }
 
                     ReadPlanElement  rpe = redfsBlockAllocator.PrepareReadPlanSingle(dbnl2);
                     redFSPersistantStorage.ExecuteReadPlanSingle(rpe, wbl2);
@@ -1759,6 +1787,18 @@ namespace REDFS_ClusterMode
 
                     int idx = wbl1.myidx_in_myparent();
                     long dbnl1 = wbl2.get_child_dbn(idx);
+
+                    if (dbnl1 > 1000000 || dbnl1 == DBN.INVALID)
+                    {
+                        
+                        long[] dbnsInL2 = new long[OPS.FS_SPAN_OUT];
+                        for (int i=0;i<OPS.FS_SPAN_OUT;i++)
+                        {
+                            dbnsInL2[i] = wbl2.get_child_dbn(i);
+                        }
+                        Console.WriteLine("Some issue with dbns");
+                    }
+
                     DEFS.ASSERT(dbnl1 != DBN.INVALID, "Invalid dbn found in a valid portion 2, fsize = " + wip.get_filesize());
                     DEFS.ASSERT(wbl1.needtouchbuf, "This cannot be cleared out! 2");
                     DEFS.ASSERT(wbl1.needdbnreassignment, "we also need to reassign this dbn in case of overwrite 2");
@@ -1805,8 +1845,13 @@ namespace REDFS_ClusterMode
                     long dbn0 = wip.get_child_dbn(idx);
                     DEFS.ASSERT(dbn0 != DBN.INVALID, "Invalid dbn found in a valid portion 4, fsize = " + wip.get_filesize());
 
-                    RedBufL0 wbl0 = (RedBufL0)redfs_allocate_buffer( wip, BLK_TYPE.REGULAR_FILE_L0, someL0fbn, true, Array.Empty<long>(), 0);
+                    RedBufL0 wbl0 = (RedBufL0)redfs_allocate_buffer(wip, BLK_TYPE.REGULAR_FILE_L0, someL0fbn, true, Array.Empty<long>(), 0);
                     wbl0.m_dbn = dbn0;
+
+                    if (dbn0 > 10000000)
+                    {
+                        Console.WriteLine("Something went wrong");
+                    }
 
                     if (forwrite == false)
                     {
@@ -1841,12 +1886,12 @@ namespace REDFS_ClusterMode
 
                     RedBufL0 wbl0 = (RedBufL0)redfs_allocate_buffer(wip, BLK_TYPE.REGULAR_FILE_L0, someL0fbn, true, Array.Empty<long>(), 0);
                     wbl0.m_dbn = dbn0;
-
-                    //if (forwrite == false)
-                    //{
+                    //XXX verify workflow.
+                    if (forwrite == false)
+                    {
                         ReadPlanElement rpe = redfsBlockAllocator.PrepareReadPlanSingle(dbn0);
                         redFSPersistantStorage.ExecuteReadPlanSingle(rpe, wbl0);
-                    //}
+                    }
 
                     if (forwrite == false && wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE)
                     {
@@ -1896,6 +1941,7 @@ namespace REDFS_ClusterMode
             wip.is_dirty = true;
         }
 
+
         /*
          * The caller must set the parent appropriately. This will just return a buffer from cache
          */ 
@@ -1944,6 +1990,10 @@ namespace REDFS_ClusterMode
                     dbn = redfsBlockAllocator.allocateDBN(fsid, spanType);
                 }
 
+                if (dbn > 1000000)
+                {
+                    Console.WriteLine("For testing...");
+                }
                 wb.set_dbn_reassignment_flag(false); //this is just created!.
                 wb.set_touchrefcnt_needed(false); //nobody is derived from this.
                 REDFS_BUFFER_ENCAPSULATED wbe = new REDFS_BUFFER_ENCAPSULATED(wb);

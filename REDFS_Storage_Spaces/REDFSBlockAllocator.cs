@@ -180,6 +180,9 @@ namespace REDFS_ClusterMode
          */ 
         public long[] allocateDBNS(int fsid, SPAN_TYPE spanType, long start_dbn, int num_dbns)
         {
+            //ukey is 1 as we are not multithreaded here.
+            REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.DBN_ALLOC_MS, 1);
+
             if (start_dbn < OPS.MIN_ALLOCATABLE_DBN)
             {
                 start_dbn = OPS.MIN_ALLOCATABLE_DBN;
@@ -237,6 +240,7 @@ namespace REDFS_ClusterMode
             }
 
             quickSearchStartFbn[(int)spanType] = dbns[dbns.Length - 1];
+            REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.DBN_ALLOC_MS, 1);
             return dbns;
         }
 

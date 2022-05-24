@@ -158,7 +158,7 @@ namespace REDFS_ClusterMode
 
             lock (buff_t8)
             {
-                Array.Copy(data, offset, buff_t8, 0, 6);
+                Array.Copy(data, offset, buff_t8, 0, 8);
                 returnvalue = BitConverter.ToInt64(buff_t8, 0);
             }
             return returnvalue;
@@ -177,8 +177,8 @@ namespace REDFS_ClusterMode
             data[offset + 3] = val[3];
             data[offset + 4] = val[4];
             data[offset + 5] = val[5];
-            //data[offset + 6] = val[6];
-            //data[offset + 7] = val[7];
+            data[offset + 6] = val[6];
+            data[offset + 7] = val[7];
         }
 
         public static void GenerateXORBuf(string key)
@@ -552,6 +552,8 @@ namespace REDFS_ClusterMode
         public int tfbn; /* the fbn of the transaction file */
         public bool processed;
         public bool deleted_sucessfully;
+
+        public string who;
     }
 
     public class WRContainer
