@@ -114,13 +114,6 @@ namespace REDFS_ClusterMode
 
         private long start_dbn_single = 1024; /* Where the first free dbn for user data is located */
 
-        public Map128TB(string testfile, long used_blocks)
-        {
-            mfile = new FileStream(testfile, FileMode.OpenOrCreate, FileAccess.ReadWrite);
-            initialized = true;
-            USED_BLK_COUNT = used_blocks;
-        }
-
         public Map128TB(string name)
         {
             mfile = new FileStream(REDFS.getAbsoluteContainerPath() + "\\" + name,

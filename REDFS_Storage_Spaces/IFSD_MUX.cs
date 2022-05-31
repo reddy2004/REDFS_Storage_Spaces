@@ -33,6 +33,11 @@ namespace REDFS_ClusterMode
             oThread.Start();
         }
 
+        public long getUsedBlockCount()
+        {
+            return redfsCore.redfsBlockAllocator.allocBitMap32TBFile.USED_BLK_COUNT;
+        }
+
         public void CreateZeroRootVolume()
         {
             FSIDList[0] = redfsCore.CreateZeroRootVolume();
@@ -57,34 +62,6 @@ namespace REDFS_ClusterMode
         public int CreateAndInitNewFSIDFromRootVolume()
         {
             int newFsidId = numValidFsids++;
-
-            /*
-            RedFS_Inode iMapWip = new RedFS_Inode(WIP_TYPE.PUBLIC_INODE_MAP, 1, -1);
-            RedFS_Inode inodeFile = new RedFS_Inode(WIP_TYPE.PUBLIC_INODE_FILE, 0, -1);
-
-            //inodeFile.set_filesize((long)128 * 1024 * 1024 * 1024);
-            redfsCore.redfs_resize_wip(newFsidId, inodeFile, (long)128 * 1024 * 1024 * 1024, false);
-
-            //iMapWip.set_filesize( ((long)inodeFile.get_filesize() / OPS.WIP_SIZE) / 8); //67108864
-            redfsCore.redfs_resize_wip(newFsidId, iMapWip, ((long)inodeFile.get_filesize() / OPS.WIP_SIZE) / 8, false);
-
-            DEFS.ASSERT(inodeFile.get_filesize() == (long)128 * 1024 * 1024 * 1024, "inowip size mismatch " + inodeFile.get_filesize());
-            DEFS.ASSERT(iMapWip.get_filesize() == ((long)inodeFile.get_filesize() / OPS.WIP_SIZE) / 8, "iMapWip size mismatch " + iMapWip.get_filesize());
-
-            RedFS_FSID newFsid = new RedFS_FSID(newFsidId, 0);
-            newFsid.set_inodefile_wip(inodeFile);
-            newFsid.set_inodemap_wip(iMapWip);
-            newFsid.set_logical_data(0);
-            newFsid.set_start_inonumber(64);
-
-            redfsCore.sync(inodeFile);
-            redfsCore.sync(iMapWip);
-            redfsCore.flush_cache(inodeFile, true);
-            redfsCore.flush_cache(iMapWip, true);
-
-            DEFS.ASSERT(inodeFile.get_incore_cnt() == 0, "Dont cache blocks during init");
-            DEFS.ASSERT(iMapWip.get_incore_cnt() == 0, "Dont cache blocks during init");
-            */
 
             FSIDList[newFsidId] = redfsCore.CreateEmptyFSID(newFsidId);
             FSIDList[newFsidId].set_dirty(true);
@@ -213,7 +190,10 @@ namespace REDFS_ClusterMode
                         continue;
                     }
 
-                    do_fsid_sync_internal(i);
+                    //XXX possibly causing issues. Looks like we are writing out an older version of incore
+                    //inofile and when we sync elsewhere we dont update the ino file as its not dirty and we
+                    //drop the updates.
+                    //do_fsid_sync_internal(i);
                 }
 
                 if (m_shutdown && shutdownloop)
@@ -231,19 +211,6 @@ namespace REDFS_ClusterMode
 
         private void do_fsid_sync_internal(int id)
         {
-            /*
-            lock (FSIDList[id])
-            {
-                RedFS_Inode inowip = FSIDList[id].get_inode_file_wip("GC1");
-                redfsCore.sync(inowip);
-                redfsCore.flush_cache(inowip, true);
-                redfsCore.redfs_commit_fsid(FSIDList[id]);
-            }
-            */
-            //fix - very important
-            //FSIDList[id].rootdir.sync();
-            //FSIDList[id].rootdir.gc();
-
             if (m_shutdown == true)
             {
                 //fix
@@ -254,6 +221,9 @@ namespace REDFS_ClusterMode
             DEFS.ASSERT(FSIDList[id] != null, "FSID List at id: " + id + " cannot be null");
             lock (FSIDList)
             {
+                RedfsVolumeTrees[id].SyncTree();
+                RedfsVolumeTrees[id].FlushCacheL0s();
+
                 if (FSIDList[id].isDirty())
                 {
                     RedFS_Inode inowip = FSIDList[id].get_inode_file_wip("GC2");

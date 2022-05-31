@@ -167,12 +167,33 @@ namespace REDFS_ClusterMode
 
             // Update refcounts here 
             RedFS_Inode inowip = bfs.get_inode_file_wip("FSID_DUP");
+            RedFS_Inode imapwip = bfs.get_inodemap_wip();
 
             RedFS_Inode newinowip = newone.get_inode_file_wip("fsid dup");
+            RedFS_Inode newimapwip = newone.get_inodemap_wip();
 
             DEFS.ASSERT(inowip.Equals(newinowip), "ino wips must match after fsid duping!");
+            DEFS.ASSERT(imapwip.Equals(newimapwip), "imap wips must match after fsid duping!");
+
+            lock(imapwip)
+            {
+                if (imapwip.get_inode_level() == 1)
+                {
+                    for (int i = 0; i < OPS.NUML1(imapwip.get_filesize()); i++)
+                    {
+                        RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(imapwip, 1, OPS.PIDXToStartFBN(1, i), false);
+                        redfsBlockAllocator.increment_refcount(newone.get_fsid(), wbl1, false);
+                    }
+                }
+                else
+                {
+                    throw new SystemException("imap file should be level 1 file");
+                }
+            }
+
             lock (inowip)
             {
+                /*
                 if (inowip.get_inode_level() == 0)
                 {
                     for (int i = 0; i < OPS.NUML0(inowip.get_filesize()); i++)
@@ -189,13 +210,17 @@ namespace REDFS_ClusterMode
                         redfsBlockAllocator.increment_refcount(newone.get_fsid(), wbl1, false);
                     }
                 }
-                else if (inowip.get_inode_level() == 2)
+                else */if (inowip.get_inode_level() == 2)
                 {
                     for (int i = 0; i < OPS.NUML2(inowip.get_filesize()); i++)
                     {
                         RedBufL2 wbl2 = (RedBufL2)redfs_load_buf(inowip, 2, OPS.PIDXToStartFBN(2, i), false);
                         redfsBlockAllocator.increment_refcount(newone.get_fsid(), wbl2, false);
                     }
+                } 
+                else
+                {
+                    throw new SystemException("Inode file must be L2 (level 2 file)");
                 }
             }
             
@@ -438,10 +463,30 @@ namespace REDFS_ClusterMode
             return mywip.verify_inode_number();
         }
 
+        private Boolean shouldSave(long[] fbns, int[] levels, long curr_fbn, int curr_level)
+        {
+            if (fbns == null || levels == null || fbns.Length == 0)
+            {
+                return false;
+            }
+            DEFS.ASSERT(fbns.Length == levels.Length, "should be dqual");
+
+            for (int i=0;i<fbns.Length;i++)
+            {
+                if (fbns[i] == curr_fbn && levels[i] == curr_level)
+                {
+                    fbns[i] = -1;
+                    levels[i] = 0;
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /*
          * return json string, so its easy to work with
          */ 
-        public PrintableWIP redfs_list_tree(RedFS_Inode wip)
+        public PrintableWIP redfs_list_tree(RedFS_Inode wip, long[] fbns, int[] levels)
         {
             PrintableWIP pwip = new PrintableWIP();
 
@@ -462,6 +507,16 @@ namespace REDFS_ClusterMode
                 for (int i=0;i<numDbns;i++)
                 {
                     pwip.wipIdx[i] = wip.get_child_dbn(i);
+                    if (wip.get_child_dbn(i) != 0)
+                    {
+                        pwip.ondiskL0Blocks++;
+                    }
+
+                    if (shouldSave(fbns, levels, i, 0))
+                    {
+                        Red_Buffer rf = redfs_load_buf(wip, 0, i, false);
+                        pwip.requestedBlocks.Add(rf);
+                    }
                 }
             } 
             else if (wip.get_inode_level() == 1)
@@ -473,6 +528,14 @@ namespace REDFS_ClusterMode
                 int L0ctr = (int)numDbns;
                 for (int i = 0; i < numL1s; i++)
                 {
+                    long dbnL1 = wip.get_child_dbn(i);
+                    if (dbnL1 == 0)
+                    {
+                        L0ctr -= OPS.FS_BLOCK_SIZE;
+                        continue;
+                    }
+
+                    pwip.ondiskL1Blocks++;
                     RedBufL1 wbl1 =  (RedBufL1)redfs_load_buf(wip, 1, (long)i * OPS.FS_SPAN_OUT, false);
                     pwip.wipIdx[i] = wip.get_child_dbn(i);
 
@@ -481,6 +544,22 @@ namespace REDFS_ClusterMode
                     for (int j=0;j<count;j++)
                     {
                         pwip.L0_DBNS[i * OPS.FS_SPAN_OUT + j] = wbl1.get_child_dbn(j);
+                        if (wbl1.get_child_dbn(j) != 0)
+                        {
+                            pwip.ondiskL0Blocks++;
+                        }
+
+                        if (shouldSave(fbns, levels, i * OPS.FS_SPAN_OUT + j, 0))
+                        {
+                            Red_Buffer rf = redfs_load_buf(wip, 0, i, false);
+                            pwip.requestedBlocks.Add(rf);
+                        }
+                    }
+
+                    if (shouldSave(fbns, levels, i * OPS.FS_SPAN_OUT, 1))
+                    {
+                        Red_Buffer rf = redfs_load_buf(wip, 1, i * OPS.FS_SPAN_OUT, false);
+                        pwip.requestedBlocks.Add(rf);
                     }
                     L0ctr -= count;
                 }
@@ -495,23 +574,65 @@ namespace REDFS_ClusterMode
                 int L1ctr = (int)numL1s;
                 for (int k=0;k<numL2s;k++)
                 {
+                    long dbnL2 = wip.get_child_dbn(k);
+                    if (dbnL2 == 0)
+                    {
+                        numDbns -= OPS.FS_BLOCK_SIZE * OPS.FS_BLOCK_SIZE;
+                        continue;
+                    }
                     pwip.wipIdx[k] = wip.get_child_dbn(k);
+                    pwip.ondiskL2Blocks++;
+
                     RedBufL2 wbl2 = (RedBufL2)redfs_load_buf(wip, 2, (long)k * OPS.FS_SPAN_OUT * OPS.FS_SPAN_OUT, false);
 
                     int countL1 = (L1ctr > OPS.FS_SPAN_OUT) ? OPS.FS_SPAN_OUT : L1ctr;
 
                     for (int j = 0; j < countL1; j++)
                     {
+                        long dbnL1 = wbl2.get_child_dbn(j);
+
+                        if (dbnL1 == 0)
+                        {
+                            numDbns -= OPS.FS_BLOCK_SIZE;
+                            continue;
+                        }
+
+                        pwip.ondiskL1Blocks++;
                         pwip.L1_DBNS[k * OPS.FS_SPAN_OUT + j] = wbl2.get_child_dbn(j);
 
                         RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(wip, 1, (long)k * OPS.FS_SPAN_OUT + j, false);
 
-                        int count = (int)(numDbns % OPS.FS_SPAN_OUT);
+                        int count = (numDbns > OPS.FS_SPAN_OUT) ? OPS.FS_SPAN_OUT :  (int)(numDbns % OPS.FS_SPAN_OUT);
 
                         for (int m = 0; m < count; m++)
                         {
                             pwip.L0_DBNS[k * OPS.FS_SPAN_OUT * OPS.FS_SPAN_OUT +  j * OPS.FS_SPAN_OUT + m] = wbl1.get_child_dbn(m);
+
+                            if (wbl1.get_child_dbn(m) != 0)
+                            {
+                                pwip.ondiskL0Blocks++;
+                            }
+
+                            if (shouldSave(fbns, levels, k * OPS.FS_SPAN_OUT * OPS.FS_SPAN_OUT + j * OPS.FS_SPAN_OUT + m, 0))
+                            {
+                                Red_Buffer rf = redfs_load_buf(wip, 0, k * OPS.FS_SPAN_OUT * OPS.FS_SPAN_OUT + j * OPS.FS_SPAN_OUT + m, false);
+                                pwip.requestedBlocks.Add(rf);
+                            }
                         }
+
+                        if (shouldSave(fbns, levels, k * OPS.FS_SPAN_OUT * OPS.FS_SPAN_OUT + j * OPS.FS_SPAN_OUT, 1))
+                        {
+                            Red_Buffer rf = redfs_load_buf(wip, 1, k * OPS.FS_SPAN_OUT * OPS.FS_SPAN_OUT + j * OPS.FS_SPAN_OUT, false);
+                            pwip.requestedBlocks.Add(rf);
+                        }
+
+                        numDbns -= count;
+                    }
+
+                    if (shouldSave(fbns, levels, k * OPS.FS_SPAN_OUT * OPS.FS_SPAN_OUT, 2))
+                    {
+                        Red_Buffer rf = redfs_load_buf(wip, 2, k * OPS.FS_SPAN_OUT * OPS.FS_SPAN_OUT, false);
+                        pwip.requestedBlocks.Add(rf);
                     }
 
                     L1ctr -= countL1;
@@ -983,7 +1104,7 @@ namespace REDFS_ClusterMode
             if (dbn0 > 1000000)
             {
                 
-                PrintableWIP pwip = redfs_list_tree(wip);
+                PrintableWIP pwip = redfs_list_tree(wip, Array.Empty<long>(), Array.Empty<int>());
                 long filesize = wip.get_filesize();
                 Console.WriteLine("For debug! fszie =" + filesize);
             }
@@ -1252,7 +1373,7 @@ namespace REDFS_ClusterMode
 
         public void sync(RedFS_Inode wip)
         {
-            if (wip.m_ino >=64)
+            if (wip.m_ino == 0)
             {
                 Console.WriteLine("Just to capture this execution point in debug");
             }

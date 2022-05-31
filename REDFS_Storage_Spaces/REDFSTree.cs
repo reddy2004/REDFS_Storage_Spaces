@@ -49,6 +49,10 @@ namespace REDFS_ClusterMode
             string result = System.Text.Encoding.UTF8.GetString(buffer);
         }
 
+        /*
+         * Note that rootdir is ino=2 and this bit is not set in the imap file as 
+         * we will never touch it or check it anyway
+         */ 
         public void CreateRootDirectoryWip()
         {
             RedFS_Inode wip = new RedFS_Inode(WIP_TYPE.DIRECTORY_FILE, 2, -1);
@@ -58,7 +62,7 @@ namespace REDFS_ClusterMode
             RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("CTreeinit");
             DEFS.ASSERT(inowip.get_filesize() == (long)128 * 1024 * 1024 * 1024, "inowip size mismatch " + inowip.get_filesize());
 
-            PrintableWIP pwip = redfsCoreLocalCopy.redfs_list_tree(inowip);
+            PrintableWIP pwip = redfsCoreLocalCopy.redfs_list_tree(inowip, Array.Empty<long>(), Array.Empty<int>());
 
             redfsCoreLocalCopy.redfs_checkin_wip(inowip, wip, wip.get_ino()); //just commit some basic wip 
 
@@ -72,8 +76,6 @@ namespace REDFS_ClusterMode
 
             redfsCoreLocalCopy.sync(inowip);
             redfsCoreLocalCopy.flush_cache(inowip, false);
-
-            
 
             long rootDirSize = ((REDFSInode)inodes["\\"]).myWIP.get_filesize();
             DEFS.ASSERT(0 != rootDirSize, "Created a wip for a new rootdir in new fsid, but size is zero! " + rootDirSize);
@@ -176,25 +178,36 @@ namespace REDFS_ClusterMode
 
                     foreach (OnDiskInodeInfo item in oddi.inodes)
                     {
+                        string fullChildPath = (path == "\\") ? ("\\" + item.fileInfo.FileName) : (path + "\\" + item.fileInfo.FileName);
+
                         //too weird logic
                         if (!currDir.items.Contains(item.fileInfo.FileName))
                         {
                             currDir.items.Add(item.fileInfo.FileName);
                         }
-                        if (!inodes.Contains(item.fileInfo.FileName))
+                        if (!inodes.Contains(fullChildPath))
                         {
                             bool isDirectory = item.fileInfo.Attributes.HasFlag(FileAttributes.Directory);
-                            string fullChildPath = (path == "\\")? ("\\" + item.fileInfo.FileName) : ( path + "\\" + item.fileInfo.FileName);
+                            
                             int ino = item.ino;
                             inodes[fullChildPath] = new REDFSInode(isDirectory, path, item.fileInfo.FileName);
                             RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("load some skeleton dir");
+
+                            //xxx load wip not working.
                             ((REDFSInode)inodes[fullChildPath]).LoadWipForExistingInode(redfsCoreLocalCopy, inowip, ino, currDir.myWIP.get_ino());
+
+                            DEFS.ASSERT(((REDFSInode)inodes[fullChildPath]).myWIP.m_ino == ino, "wip shhould load correctly!");
 
                             if (isDirectory)
                             {
                                 //One of the loaded directories children are still not incore.
                                 ((REDFSInode)inodes[fullChildPath]).isInodeSkeleton = true;
                             }
+                        }
+                        else
+                        {
+                            DEFS.ASSERT(((REDFSInode)inodes[fullChildPath]).myWIP.m_ino == item.ino, "wip shhould be correct atleast!");
+                            DEFS.ASSERT(((REDFSInode)inodes[fullChildPath]).myWIP.is_dirty == false, "parent is skeleton so wip should not be dirty");
                         }
                     }
                     currDir.isInodeSkeleton = false;
@@ -235,6 +248,69 @@ namespace REDFS_ClusterMode
                 }
                 return false;
             }
+        }
+
+        public Boolean CreateFileWithdWip(string filePath, RedFS_Inode rclone)
+        {
+            string firstComponent;
+            string inDir = GetParentPath(filePath, out firstComponent);
+
+            if (!inodes.Contains(inDir))
+            {
+                if (!LoadDirectory(inDir))
+                {
+                    //parent directory where we want to create file is not present
+                    return false;
+                }
+                //Parent directory is present and loaded.
+                return CreateFileInternalFromWip(fsidLocalCopy, inDir, firstComponent, rclone);
+            }
+            else
+            {
+                //parent folder is incore
+                return CreateFileInternalFromWip(fsidLocalCopy, inDir, firstComponent, rclone);
+            }
+
+            throw new SystemException("Error: Could not create file with wip: " + filePath);
+        }
+
+        private Boolean CreateFileInternalFromWip(RedFS_FSID fsid, string inFolder, string fileName, RedFS_Inode rclone)
+        {
+            REDFSInode newFile = new REDFSInode(false, inFolder, fileName);
+            REDFSInode directory = (REDFSInode)inodes[inFolder];
+
+            RedFS_Inode inowip = fsid.get_inode_file_wip("CreateFileInternal");
+
+            int newInodeNum = redfsCoreLocalCopy.NEXT_INODE_NUMBER(fsid);
+
+            newFile.InsertWipForNewlyCreatedInode(fsid.get_fsid(), newInodeNum, directory.myWIP.get_ino(), rclone);
+            newFile.isDirty = true;
+
+            DEFS.ASSERT(newFile.isDirty == true, "New file should be marked dirty");
+            DEFS.ASSERT(newFile.myWIP.is_dirty == true, "New file wip should also be dirty!");
+
+            if (inFolder == "\\")
+            {
+                inodes.Add("\\" + fileName, newFile);
+            }
+            else
+            {
+                inodes.Add(inFolder + "\\" + fileName, newFile);
+            }
+            if (!directory.items.Contains(fileName))
+            {
+                directory.AddNewInode(fileName);
+                directory.isDirty = true;
+            }
+
+            //It will be marked dirty at time of syncTree also when we checkin the wip
+            //at this point, ino wip is not actually modified. During syncTree, the tree item (object)
+            //REDFSInode is cleaned by writing out the content into the FS and pointers are updated in
+            //RedFS_Inode, and the object (RedFS_Inode), i.e wip, is marked dirty. We write out this
+            //RedFS_Inode and then checkin the wip (RedFS_Inode) to inode file and inode files is marked
+            //dirty thereafter.
+            inowip.is_dirty = true;
+            return true;
         }
 
         public REDFSInode GetInode(string fullPath)
@@ -810,8 +886,56 @@ namespace REDFS_ClusterMode
 
         public int FlushCacheL0s()
         {
+            RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("Sync");
+            RedFS_Inode imapwip = fsidLocalCopy.get_inodemap_wip();
+
+            redfsCoreLocalCopy.flush_cache(inowip, true);
+            redfsCoreLocalCopy.flush_cache(imapwip, true);
+
             REDFSInode rootdir = (REDFSInode)inodes["\\"];
             return rootdir.FlushCacheL0s(redfsCoreLocalCopy, inodes);
+        }
+
+        public Boolean GetDebugSummaryOfFSID(DebugSummaryOfFSID dsof)
+        {
+            List<string> dirsToBeloaded_Itr = new List<string>();
+            dirsToBeloaded_Itr.Add("\\");
+
+            while (true)
+            {
+                List<string> dirsToBeloaded = new List<string>();
+
+                foreach (string itr in dirsToBeloaded_Itr)
+                {
+                    LoadDirectory(itr);
+                    REDFSInode currdir = (REDFSInode)inodes[itr];
+                    currdir.PreSummaryDirectoryLoadList(dirsToBeloaded, inodes);
+                }
+
+                dirsToBeloaded_Itr.Clear();
+
+                foreach (string dir in dirsToBeloaded)
+                {
+                    LoadDirectory(dir);
+                    dirsToBeloaded_Itr.Add(dir);
+                }
+
+                if (dirsToBeloaded.Count == 0)
+                {
+                    break;
+                }                
+            }
+
+            try
+            {
+                REDFSInode rootdir = (REDFSInode)inodes["\\"];
+                return rootdir.GetDebugSummaryOfFSID(dsof, inodes, redfsCoreLocalCopy);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Issue with GetDebugSummaryOfFSID :" + e.Message);
+            }
+            return false;
         }
 
         public void SyncTree()
@@ -836,7 +960,14 @@ namespace REDFS_ClusterMode
                 {
                     LoadDirectory(dir);
                 }
-                rootdir.SyncInternal(inowip, redfsCoreLocalCopy, inodes);
+                try
+                {
+                    rootdir.SyncInternal(inowip, redfsCoreLocalCopy, inodes);
+                }
+                catch( Exception e)
+                {
+                    Console.WriteLine("Issue with sync intermal:" + e.Message);
+                }
                 redfsCoreLocalCopy.sync(inowip);
                 redfsCoreLocalCopy.sync(imapwip);
                 redfsCoreLocalCopy.flush_cache(inowip, false);

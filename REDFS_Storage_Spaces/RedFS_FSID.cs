@@ -70,14 +70,20 @@ namespace REDFS_ClusterMode
 
         public RedFS_Inode get_inodemap_wip()
         {
-            RedFS_Inode inowip = new RedFS_Inode(WIP_TYPE.PUBLIC_INODE_MAP, 0, -1);
-            byte[] buf = new byte[OPS.WIP_SIZE];
-            for (int i = 0; i < OPS.WIP_SIZE; i++)
+            if (_nimapwip == null)
             {
-                buf[i] = data[CFSvalueoffsets.fsid_inomap_data + i];
+                _nimapwip = new RedFS_Inode(WIP_TYPE.PUBLIC_INODE_MAP, 0, -1);
+                byte[] buf = new byte[OPS.WIP_SIZE];
+                for (int i = 0; i < OPS.WIP_SIZE; i++)
+                {
+                    buf[i] = data[CFSvalueoffsets.fsid_inomap_data + i];
+                }
+                _nimapwip.set_wiptype(WIP_TYPE.PUBLIC_INODE_MAP);
+                _nimapwip.parse_bytes(buf);
+                return _nimapwip;
             }
-            inowip.parse_bytes(buf);
-            return inowip;
+
+            return _nimapwip;
         }
 
         public bool sync_internal()

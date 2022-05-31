@@ -106,7 +106,7 @@ namespace REDFS_TESTS
             rfcore.flush_cache(rootDir.myWIP, true);
 
             //Lets see whats on disk.
-            PrintableWIP inoWip = REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_list_tree(inoFile);
+            PrintableWIP inoWip = REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_list_tree(inoFile, Array.Empty<long>(), Array.Empty<int>());
 
             RedFS_Inode myWIP_t = new RedFS_Inode(WIP_TYPE.DIRECTORY_FILE, 2, -1);
 
@@ -173,11 +173,11 @@ namespace REDFS_TESTS
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile("\\temp.dat");
 
             RedFS_Inode inoFile = REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("tester");
-            PrintableWIP pwip1 = REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_list_tree(inoFile);
+            PrintableWIP pwip1 = REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_list_tree(inoFile, Array.Empty<long>(), Array.Empty<int>());
             
 
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
-            PrintableWIP pwip2 = REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_list_tree(inoFile);
+            PrintableWIP pwip2 = REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_list_tree(inoFile, Array.Empty<long>(), Array.Empty<int>());
 
             CleanupTestContainer(containerName);
         }

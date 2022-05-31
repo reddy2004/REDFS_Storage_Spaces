@@ -114,6 +114,22 @@ namespace REDFS_ClusterMode
             touch_inode_obj();
         }
 
+        public void InsertWipForNewlyCreatedInode(int fsid, int ino, int pino, RedFS_Inode rclone)
+        {
+            DEFS.ASSERT(fileInfo.Attributes.HasFlag(FileAttributes.Normal), "We can insert wip only for files and not directories!");
+
+            myWIP = rclone; //just point it here.
+
+            //Set the correct attributes
+            myWIP.set_ino(ino, pino);
+            myWIP.m_ino = ino;
+            myWIP.setfilefsid_on_dirty(fsid);
+
+            myWIP.is_dirty = true;
+            isDirty = true;
+            touch_inode_obj();
+        }
+
         public void CreateWipForNewlyCreatedInode(int fsid, int ino, int pino)
         {
             if (fileInfo.Attributes.HasFlag(FileAttributes.Normal))
@@ -356,6 +372,77 @@ namespace REDFS_ClusterMode
             }
             return 0;
         }
+
+        public void PreSummaryDirectoryLoadList(List<string> dirsToBeloaded, IDictionary allinodes)
+        {
+            DEFS.ASSERT(isDirectory(), "PreSyncDirectoryLoadList must be called only for a directory");
+
+            string selfdirpath = (parentDirectory == null) ? "\\" : ((parentDirectory == "\\") ?
+                    "\\" + fileInfo.FileName : parentDirectory + "\\" + fileInfo.FileName);
+
+            foreach (String item in items)
+            {
+                string childpath = (parentDirectory == null) ? ("\\" + item) :
+                    (parentDirectory == "\\") ? ("\\" + fileInfo.FileName + "\\" + item) :
+                    (parentDirectory + "\\" + fileInfo.FileName + "\\" + item);
+
+                if (allinodes.Contains(childpath))
+                {
+                    REDFSInode child = (REDFSInode)allinodes[childpath];
+                    if (child.isDirectory())
+                    {
+                        dirsToBeloaded.Add(childpath);
+                    }
+                }
+            }
+        }
+
+        public Boolean GetDebugSummaryOfFSID(DebugSummaryOfFSID dsof, IDictionary allinodes, REDFSCore rfcore)
+        {
+            DEFS.ASSERT(isInodeSkeleton == false, "Cannot run query on a skeleton, must have preloaded!");
+
+            if (isDirectory())
+            {
+                foreach (String item in items)
+                {
+                    string childpath = (parentDirectory == null) ? ("\\" + item) :
+                        (parentDirectory == "\\") ? ("\\" + fileInfo.FileName + "\\" + item) :
+                        (parentDirectory + "\\" + fileInfo.FileName + "\\" + item);
+
+                    if (allinodes.Contains(childpath))
+                    {
+                        REDFSInode child = (REDFSInode)allinodes[childpath];
+                        if (child.isDirectory())
+                        {
+                            child.GetDebugSummaryOfFSID(dsof, allinodes, rfcore);
+                        }
+                        else
+                        {
+                            child.GetDebugSummaryOfFSID(dsof, allinodes, rfcore);
+                        }
+                    }
+                }
+
+                PrintableWIP pwip = rfcore.redfs_list_tree(myWIP, Array.Empty<long>(), Array.Empty<int>());
+                dsof.numDirectories++;
+                dsof.numL0s = pwip.ondiskL0Blocks;
+                dsof.numL1s = pwip.ondiskL1Blocks;
+                dsof.numL2s = pwip.ondiskL2Blocks;
+                //dsof.totalLogicalData += myWIP.get_filesize();
+
+                return true;
+            }
+            else
+            {
+                PrintableWIP pwip = rfcore.redfs_list_tree(myWIP, Array.Empty<long>(), Array.Empty<int>());
+                dsof.numFiles++;
+                dsof.numL0s = pwip.ondiskL0Blocks;
+                dsof.numL1s = pwip.ondiskL1Blocks;
+                dsof.numL2s = pwip.ondiskL2Blocks;
+                dsof.totalLogicalData += myWIP.get_filesize();
+            }
+            return false;
+        }
         /*
          * Write out all the inmemory data
          * 
@@ -367,7 +454,7 @@ namespace REDFS_ClusterMode
          * Once children are cleared, check if its become a skeleton or not.
          * a. If yes, then see if dir can remove itself and mark its parent as skeleton.
          * b. If no, check we if we have any aged files/dir and remove them.
-         */ 
+         */
         public void SyncInternal(RedFS_Inode inowip, REDFSCore redfsCore, IDictionary allinodes)
         {
             if (fileInfo.FileName == "\\")
@@ -444,6 +531,8 @@ namespace REDFS_ClusterMode
                 redfsCore.flush_cache(myWIP, false);
                 isDirty = false;
             }
+
+
             if (!isDirectory() && (isDirty || myWIP.is_dirty))
             {
                 fileInfo.Length = myWIP.get_filesize();

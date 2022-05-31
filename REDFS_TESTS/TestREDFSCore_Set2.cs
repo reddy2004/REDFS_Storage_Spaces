@@ -182,7 +182,7 @@ namespace REDFS_TESTS
             REDFS.redfsContainer.ifsd_mux.SetEndOfFile(myNewFSID.get_fsid(), "\\tempFile.dat", 9999999999, false);
             Assert.AreEqual(9999999999, wip.get_filesize());
 
-            PrintableWIP pwip = rfcc.redfs_list_tree(wip);
+            PrintableWIP pwip = rfcc.redfs_list_tree(wip, Array.Empty<long>(), Array.Empty<int>());
 
             /*
              * Notice that we are trying to create a 68GB ~approx file while we have only 2 gb of segements.
@@ -191,7 +191,7 @@ namespace REDFS_TESTS
             REDFS.redfsContainer.ifsd_mux.SetEndOfFile(myNewFSID.get_fsid(), "\\tempFile.dat", 99999999999, false);
             Assert.AreEqual(wip.get_filesize(), 99999999999);
 
-            PrintableWIP pwip1 = rfcc.redfs_list_tree(wip);
+            PrintableWIP pwip1 = rfcc.redfs_list_tree(wip, Array.Empty<long>(), Array.Empty<int>());
             REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
             
             rfcore.redfs_discard_wip(wip);
@@ -247,7 +247,7 @@ namespace REDFS_TESTS
             REDFS.redfsContainer.ifsd_mux.SetEndOfFile(myNewFSID.get_fsid(), "\\tempFile.dat", OPS.FS_BLOCK_SIZE * OPS.FS_SPAN_OUT + 1, true);
             Assert.AreEqual(OPS.FS_BLOCK_SIZE * OPS.FS_SPAN_OUT + 1, wip.get_filesize());
 
-            PrintableWIP pwip = rfcc.redfs_list_tree(wip);
+            PrintableWIP pwip = rfcc.redfs_list_tree(wip, Array.Empty<long>(), Array.Empty<int>());
 
             CleanupTestContainer(containerName);
         }

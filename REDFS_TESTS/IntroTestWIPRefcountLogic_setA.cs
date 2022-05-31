@@ -124,6 +124,26 @@ namespace REDFS_TESTS
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
         }
 
+        private void CreateAnotherCloneOfZeroVolume()
+        {
+
+            Assert.AreEqual(2, REDFS.redfsContainer.redfsChunks.Count);
+            //Clone the root volume.
+            REDFS.redfsContainer.volumeManager.CloneVolumeRaw(0, "cloneOfRoot2", "Testing", "#000000");
+            REDFS.redfsContainer.ReloadAllFSIDs();
+
+            Assert.AreEqual(REDFS.redfsContainer.volumeManager.volumes.Count, 3);
+            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.FSIDList[0] != null);
+            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.FSIDList[1] != null);
+            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.FSIDList[2] != null);
+            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.numValidFsids == 3);
+            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2] != null);
+
+            //To recover all allocated buffers
+            RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[2];
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].SyncTree();
+        }
+
         private void CreateTestFileAndWriteData(string filepath, byte[] data)
         {
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
@@ -178,16 +198,42 @@ namespace REDFS_TESTS
             CreateCloneOfZeroVolume();
 
             byte[] buffer = new byte[90099999];
+            byte[] buffer2 = new byte[90099999];
+
             int bytesRead = 0;
             Random r = new Random();
             r.NextBytes(buffer);
 
             CreateTestFileAndWriteData("\\tempfile.data", buffer);
-            //REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].ReadFile("\\tempfile.data", buffer, out bytesRead, 0);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].ReadFile("\\tempfile.data", buffer, out bytesRead, 0);
 
             REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
             RedFS_Inode wip = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\tempfile.data").myWIP;
-            rfcore.redfs_clone_wip(wip);
+
+            /*
+             * Notice we just have a wip, i.e the root pointer of the meta data tree of the inode. Who ever has this wip
+             * must be aware of how to use it - depending on weather its a file or directory. Here we know its a file, and
+             * lets say we want this clone'd file to be \\tempfile.data.clone and place it in the root of the FSID.
+             * We have to create a new file and pass this existing wip. We could also put this cloned wip into another fsid/folder
+             */
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
+
+            RedFS_Inode rclone = rfcore.redfs_clone_wip(wip);
+
+            Assert.IsTrue(rclone.m_ino == -1);
+            Assert.IsTrue(rclone.get_parent_ino() == -1);
+
+            //Lets put this wip on another fsid
+            CreateAnotherCloneOfZeroVolume();
+
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].CreateFileWithdWip("\\tempfile.data.clone", rclone);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].ReadFile("\\tempfile.data.clone", buffer2, out bytesRead, 0);
+
+            for (int i = 0; i < buffer.Length; i++)
+            {
+                Assert.AreEqual(buffer[i], buffer2[i]);
+            }
 
             CleanupTestContainer(containerName);
         }

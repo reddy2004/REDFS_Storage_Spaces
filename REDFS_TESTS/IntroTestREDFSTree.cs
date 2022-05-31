@@ -121,6 +121,18 @@ namespace REDFS_TESTS
             //To recover all allocated buffers
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
+
+            REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
+
+            PrintableWIP pwip_ifile = rfcore.redfs_list_tree(rfsid.get_inode_file_wip("c"), Array.Empty<long>(), Array.Empty<int>());
+            PrintableWIP pwip_imap = rfcore.redfs_list_tree(rfsid.get_inodemap_wip(), Array.Empty<long>(), Array.Empty<int>());
+            PrintableWIP pwip_rootdir = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, Array.Empty<long>(), Array.Empty<int>());
+
+            Assert.AreEqual(18, pwip_ifile.getTotalOndiskBlocks());
+            Assert.AreEqual(8, pwip_imap.getTotalOndiskBlocks());
+            Assert.AreEqual(1, pwip_rootdir.getTotalOndiskBlocks());
+
+            Assert.AreEqual(pwip_imap.getTotalOndiskBlocks() + pwip_ifile.getTotalOndiskBlocks() + pwip_rootdir.getTotalOndiskBlocks(), 27);
         }
 
         /*
@@ -136,11 +148,19 @@ namespace REDFS_TESTS
         public void IntroTest_5()
         {
             string containerName;
+
             InitNewTestContainer(out containerName);
 
             CreateTestContainer(containerName);
 
+            Assert.AreEqual(1, REDFS.redfsContainer.ifsd_mux.getUsedBlockCount());
+
             CreateCloneOfZeroVolume();
+            Thread.Sleep(10000); //for thread to recover those blocks.
+
+            //27 blocks for imapwip, inodefile and rootdir
+            //1 block for fsid
+            Assert.AreEqual(29, REDFS.redfsContainer.ifsd_mux.getUsedBlockCount());
 
             /*
              * Lets get a reference to our objects of interest. Previously we have already seen how to create wips
@@ -152,13 +172,19 @@ namespace REDFS_TESTS
              * of the root metadata of all the inodes in that filesystem. At offset 2 of the inode file, we have to root dir, and ino=64 onwards
              * is user created files. When creating new volume from ZeroVolume, the system automatically creates a FS in the new FSID,
              * and creates and inode file (header stored in fsid block) and a root dir inode at offset=2 in the inode file itself.
-             */ 
+             */
             RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
             REDFSTree rftree = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1];
             REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
 
             rftree.CreateDirectory("\\dir1");
             rftree.CreateDirectory("\\dir2");
+            rftree.SyncTree();
+            Thread.Sleep(2000);
+
+            //1 block for inode 65 which is at fbn 2 in inode file since NUM_WIPS_IN_BLOCK = 32
+            //2 blocks for the new directories.
+            Assert.AreEqual(30 + 3, REDFS.redfsContainer.ifsd_mux.getUsedBlockCount());
 
             for (int i=0;i<100;i++)
             {
@@ -167,14 +193,33 @@ namespace REDFS_TESTS
                 rftree.CreateDirectory("\\dir2\\" + newdir);
             }
 
-            Assert.IsTrue(rftree.getNumInodesInTree() == (1 + 2 +200));
-            Thread.Sleep(50000);
+            Assert.IsTrue(rftree.getNumInodesInTree() == (1 + 2 + 200));
 
             //Now all of them are cleared out of memory, so the global hashmap inodes[] will have only
             //1 entry left corresponding to the rootDir. rootDirs of all fsids are alwasy in memory.
+
+            Thread.Sleep(30000); //When we sync garbage collector will make dir1 and dir2 as skeleton due to TTL
             rftree.SyncTree();
-            Assert.AreEqual(rftree.getNumInodesInTree(), 3);
+            Assert.AreEqual(3, rftree.getNumInodesInTree());
             Assert.IsTrue(rftree.GetInode("\\").isInodeSkeleton == true);
+
+            //We have added another 210 blocks to the usage count
+
+            PrintableWIP pwip_ifile = rfcore.redfs_list_tree(rfsid.get_inode_file_wip("c"), new long[] { 0, 2 }, new int[] { 1, 0 });
+            PrintableWIP pwip_imap = rfcore.redfs_list_tree(rfsid.get_inodemap_wip(), Array.Empty<long>(), Array.Empty<int>());
+
+            Assert.AreEqual(25, pwip_ifile.getTotalOndiskBlocks());
+            Assert.AreEqual(9, pwip_imap.getTotalOndiskBlocks());
+
+            //200 dirs means 200/32 blocks in inodefile wip => 7 blocks
+            //1 blocks for each directory * 2 => 100 * 2 => 200 blocks
+            //3 blocks each for dir1 and dir2 as we have written out the jason file,
+            //1 block in imap file
+            //thats 200 + ( 7+  6 + 1), 214 new blocks are used.
+            //XXX Where did the other 4 blocks go????
+            //wait for the gc thread to free up some of blocks.
+            Thread.Sleep(10000);
+            Assert.AreEqual(243, REDFS.redfsContainer.ifsd_mux.getUsedBlockCount());
 
             byte[] buffer = new byte[OPS.FS_BLOCK_SIZE];
             int bytesWritten = 0;
@@ -186,13 +231,16 @@ namespace REDFS_TESTS
             rftree.WriteFile("\\dir1\\d2\\tempfile.dat", buffer, out bytesWritten, 128);
             Assert.AreEqual(rftree.getNumInodesInTree(), 104);
 
+            PrintableWIP pwip_ifile_Bs = rfcore.redfs_list_tree(rfsid.get_inode_file_wip("c"), new long[] { 0, 2 }, new int[] { 1, 0 });
+
             Thread.Sleep(50000);
             rftree.SyncTree();
-            
 
-            //rfcore.redfs_discard_wip(dir1WIP);
-            //rfcore.redfs_discard_wip(dir2WIP);
+            PrintableWIP pwip_ifile_Bsx = rfcore.redfs_list_tree(rfsid.get_inode_file_wip("c"), new long[] { 0, 2 }, new int[] { 1, 0 });
 
+            /*
+             * note that dir d2 should;ve been covered
+             */
             Assert.AreEqual(bytesWritten, OPS.FS_BLOCK_SIZE);
             Assert.AreEqual(rftree.getNumInodesInTree(), 5);
 
@@ -212,6 +260,15 @@ namespace REDFS_TESTS
             }
             Assert.AreEqual(rftree.getNumInodesInTree(), 5);
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
+
+            //2 blocks added due to tempfile.? XXX check.
+            //Assert.AreEqual(245, REDFS.redfsContainer.ifsd_mux.getUsedBlockCount());
+
+            PrintableWIP pwip_ifile2 = rfcore.redfs_list_tree(rfsid.get_inode_file_wip("c"), new long[] { 0, 2 }, new int[] { 1, 0 });
+            DebugSummaryOfFSID dsof = new DebugSummaryOfFSID();
+            rftree.GetDebugSummaryOfFSID(dsof);
+            PrintableWIP pwip_ifile3 = rfcore.redfs_list_tree(rfsid.get_inode_file_wip("c"), Array.Empty<long>(), Array.Empty<int>());
+
             CleanupTestContainer(containerName);
         }
 

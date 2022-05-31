@@ -256,7 +256,7 @@ namespace REDFS_TESTS
              */
             rfcore.sync(myWIP);
 
-            PrintableWIP pwip = rfcore.redfs_list_tree(myWIP);
+            PrintableWIP pwip = rfcore.redfs_list_tree(myWIP, Array.Empty<long>(), Array.Empty<int>());
 
             Assert.AreEqual(pwip.wipIdx.Length, 10); //10 blocks
             Assert.AreEqual(pwip.L0_DBNS, null); //coz all dbns are stored in wip itself
@@ -311,7 +311,7 @@ namespace REDFS_TESTS
 
             rfcore.sync(myWIP_c);
 
-            PrintableWIP pwip_c = rfcore.redfs_list_tree(myWIP_c);
+            PrintableWIP pwip_c = rfcore.redfs_list_tree(myWIP_c, Array.Empty<long>(), Array.Empty<int>());
 
             Assert.AreEqual(pwip_c.wipIdx.Length, 10); //10 blocks
             Assert.AreEqual(pwip_c.L0_DBNS, null); //coz all dbns are stored in wip itself
@@ -382,7 +382,7 @@ namespace REDFS_TESTS
 
             RedFS_Inode myWIP_clone = rfcore.redfs_clone_wip(myWIP);
 
-            PrintableWIP pwip_0 = rfcore.redfs_list_tree(myWIP_clone);
+            PrintableWIP pwip_0 = rfcore.redfs_list_tree(myWIP_clone, Array.Empty<long>(), Array.Empty<int>());
 
             int refcntL1 = 0, childrefcntL1 = 0;
             rfcore.redfsBlockAllocator.GetRefcounts(pwip_0.wipIdx[0], ref refcntL1, ref childrefcntL1);
@@ -404,7 +404,7 @@ namespace REDFS_TESTS
 
            
 
-            PrintableWIP pwip_1 = rfcore.redfs_list_tree(myWIP_clone);
+            PrintableWIP pwip_1 = rfcore.redfs_list_tree(myWIP_clone, Array.Empty<long>(), Array.Empty<int>());
 
             int refcntL1a = 0, childrefcntL1a = 0;
             rfcore.redfsBlockAllocator.GetRefcounts(pwip_1.wipIdx[0], ref refcntL1a, ref childrefcntL1a);
@@ -491,8 +491,8 @@ namespace REDFS_TESTS
                 rfcore.flush_cache(myWIP, false);
             }
 
-            PrintableWIP pwip_0 = rfcore.redfs_list_tree(clones[0]); //One of the clones
-            PrintableWIP pwip_1 = rfcore.redfs_list_tree(clones[1]);
+            PrintableWIP pwip_0 = rfcore.redfs_list_tree(clones[0], Array.Empty<long>(), Array.Empty<int>()); //One of the clones
+            PrintableWIP pwip_1 = rfcore.redfs_list_tree(clones[1], Array.Empty<long>(), Array.Empty<int>());
 
             Assert.AreEqual(pwip_0.wipIdx.Length, 2); //2 L1 blocks
             Assert.AreEqual(pwip_0.L0_DBNS.Length, 1152);
@@ -563,7 +563,7 @@ namespace REDFS_TESTS
                 Assert.AreEqual(buffer_out[i], buffer_raw_read[i]);
             }
 
-            PrintableWIP pwip_2 = rfcore.redfs_list_tree(clones[9]);
+            PrintableWIP pwip_2 = rfcore.redfs_list_tree(clones[9], Array.Empty<long>(), Array.Empty<int>());
 
             for (int i = 0; i < pwip_2.wipIdx.Length; i++)
             {

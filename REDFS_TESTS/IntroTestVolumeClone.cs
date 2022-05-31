@@ -154,8 +154,8 @@ namespace REDFS_TESTS
             RedFS_Inode myWIP1 = REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("tester");
             RedFS_Inode myWIP2 = REDFS.redfsContainer.ifsd_mux.FSIDList[2].get_inode_file_wip("tester");
 
-            PrintableWIP pwip1 = rfcore.redfs_list_tree(myWIP1);
-            PrintableWIP pwip2 = rfcore.redfs_list_tree(myWIP2);
+            PrintableWIP pwip1 = rfcore.redfs_list_tree(myWIP1, Array.Empty<long>(), Array.Empty<int>());
+            PrintableWIP pwip2 = rfcore.redfs_list_tree(myWIP2, Array.Empty<long>(), Array.Empty<int>());
 
             Assert.AreEqual(pwip1.wipIdx.Length, 16); //16 pointers of L2 blocks
             Assert.AreEqual(pwip1.L0_DBNS.Length, 16777216); 
@@ -255,8 +255,8 @@ namespace REDFS_TESTS
 
             Assert.AreEqual(myWIP2.get_filesize(), myWIP1.get_filesize());
 
-            PrintableWIP pwip1 = rfcore.redfs_list_tree(myWIP1);
-            PrintableWIP pwip2 = rfcore.redfs_list_tree(myWIP2);
+            PrintableWIP pwip1 = rfcore.redfs_list_tree(myWIP1, Array.Empty<long>(), Array.Empty<int>());
+            PrintableWIP pwip2 = rfcore.redfs_list_tree(myWIP2, Array.Empty<long>(), Array.Empty<int>());
 
             Assert.AreEqual(pwip1.wipIdx.Length, 16); //16 pointers of L2 blocks
             Assert.AreEqual(pwip1.L0_DBNS.Length, 16777216);

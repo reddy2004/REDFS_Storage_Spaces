@@ -39,6 +39,14 @@ namespace REDFS_ClusterMode
         }
     }
 
+    public class DebugSummaryOfFSID
+    {
+        public long totalLogicalData;
+
+        public long numL2s, numL1s, numL0s;
+        public int numFiles, numDirectories;
+    }
+
     public class PrintableWIP
     {
         public int ino, pino;
@@ -51,6 +59,17 @@ namespace REDFS_ClusterMode
         public long[] L1_DBNS;
         public long[] L0_DBNS;
 
+        public long ondiskL2Blocks = 0;
+        public long ondiskL1Blocks = 0;
+        public long ondiskL0Blocks = 0;
+
+        //read in all the blocks requested by the called. useful for examining ondisk data.
+        public List<Red_Buffer> requestedBlocks = new List<Red_Buffer>();
+        
+        public long getTotalOndiskBlocks()
+        {
+            return ondiskL0Blocks + ondiskL1Blocks + ondiskL2Blocks;
+        }
         public void Print_L0_DBNS()
         {
             for (int i=0;i< L0_DBNS.Length;i++)
@@ -112,6 +131,7 @@ namespace REDFS_ClusterMode
         public bool is_dirty;
         public ulong iohistory = 0;
         public int m_ino;
+        public long size; //this is only for debugging.
 
         public SPAN_TYPE spanType = SPAN_TYPE.DEFAULT;
 
@@ -227,12 +247,14 @@ namespace REDFS_ClusterMode
 
         public long get_filesize()
         {
-            return get_long(WIDOffsets.wip_size);
+            size = get_long(WIDOffsets.wip_size);
+            return size;
         }
 
         public void set_filesize(long s)
         {
             set_long(WIDOffsets.wip_size, s);
+            size = s;
         }
 
         public int get_cookie()
@@ -319,6 +341,7 @@ namespace REDFS_ClusterMode
                 data[i] = buf[i];
             }
             m_ino = get_ino();
+            size = get_long(WIDOffsets.wip_size);
         }
 
         public bool verify_inode_number()
