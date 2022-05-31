@@ -378,6 +378,7 @@ namespace REDFS_ClusterMode
 
         public void tBlockingDokanFSThread()
         {
+            DEFS.ASSERT(REDFS.redfsContainer.containerOperations.currentlyMountedVolume >= 1, "should be greateer than 1");
             ifs = new IncoreFSSkeleton(ifsd_mux.RedfsVolumeTrees[REDFS.redfsContainer.containerOperations.currentlyMountedVolume]);
             ifs.Mount(@"N:\", /*DokanOptions.DebugMode | DokanOptions.EnableNotificationAPI*/ DokanOptions.FixedDrive, /*treadCount=*/5, new NullLogger());
             Console.WriteLine("tBlockingDokanFSThread is done <><><><><><><<>");

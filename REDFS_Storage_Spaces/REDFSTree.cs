@@ -611,7 +611,7 @@ namespace REDFS_ClusterMode
                 DEFS.ASSERT(rfi != null && rfi.isDirectory(), "Should be a directory!");
 
                 REDFSInode rfit = (REDFSInode)inodes[path];
-                DEFS.ASSERT(rfit != null && !rfit.isDirectory(), "Should be a directory!");
+                DEFS.ASSERT(rfit != null && rfit.isDirectory(), "Should be a directory!");
 
                 List<string> clist = (List<string>)rfit.ListFilesWithPattern("*");
 

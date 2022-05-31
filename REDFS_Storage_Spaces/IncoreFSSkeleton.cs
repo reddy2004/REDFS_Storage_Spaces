@@ -40,6 +40,7 @@ namespace REDFS_ClusterMode
             fSecurity = new FileInfo(@"Data/fSecurity.txt").GetAccessControl();
             dSecurity = new DirectoryInfo(@"Data/dSecurity").GetAccessControl();
             DokanSideMetrics.init();
+            DEFS.ASSERT(r != null, "should not be null");
             rootDirectory = r;
         }
 
@@ -345,6 +346,12 @@ namespace REDFS_ClusterMode
 
         NtStatus IDokanOperations.GetFileInformation(string fileName, out FileInformation fileInfo, IDokanFileInfo info)
         {
+            if (rootDirectory == null)
+            {
+                fileInfo = new FileInformation();
+                return NtStatus.Error;
+            }
+
             //FileSystemInfo finfo = new FileInfo();
             //FileSystemInfofinfo finfo  = new DirectoryInfo()
             if (fileName == "\\")

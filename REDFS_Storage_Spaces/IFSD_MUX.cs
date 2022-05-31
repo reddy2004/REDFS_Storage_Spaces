@@ -48,6 +48,8 @@ namespace REDFS_ClusterMode
         {
             int newFsidId = numValidFsids++;
 
+            do_fsid_sync_internal(rfsid.get_fsid());
+
             FSIDList[newFsidId] = redfsCore.redfs_dup_fsid(rfsid);
             FSIDList[newFsidId].set_dirty(true);
 
@@ -221,8 +223,11 @@ namespace REDFS_ClusterMode
             DEFS.ASSERT(FSIDList[id] != null, "FSID List at id: " + id + " cannot be null");
             lock (FSIDList)
             {
-                RedfsVolumeTrees[id].SyncTree();
-                RedfsVolumeTrees[id].FlushCacheL0s();
+                if (id != 0)
+                {
+                    RedfsVolumeTrees[id].SyncTree();
+                    RedfsVolumeTrees[id].FlushCacheL0s();
+                }
 
                 if (FSIDList[id].isDirty())
                 {

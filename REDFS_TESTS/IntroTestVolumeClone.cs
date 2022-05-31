@@ -199,6 +199,9 @@ namespace REDFS_TESTS
                 }
             }
 
+            DebugSummaryOfFSID dsof = new DebugSummaryOfFSID();
+            rftree.GetDebugSummaryOfFSID(dsof);
+
             Assert.AreEqual(nonZeroDbns, 1); //for root directory which was written out.
             CleanupTestContainer(containerName);
         }

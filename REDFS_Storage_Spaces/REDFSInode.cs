@@ -425,9 +425,9 @@ namespace REDFS_ClusterMode
 
                 PrintableWIP pwip = rfcore.redfs_list_tree(myWIP, Array.Empty<long>(), Array.Empty<int>());
                 dsof.numDirectories++;
-                dsof.numL0s = pwip.ondiskL0Blocks;
-                dsof.numL1s = pwip.ondiskL1Blocks;
-                dsof.numL2s = pwip.ondiskL2Blocks;
+                dsof.numL0s += pwip.ondiskL0Blocks;
+                dsof.numL1s += pwip.ondiskL1Blocks;
+                dsof.numL2s += pwip.ondiskL2Blocks;
                 //dsof.totalLogicalData += myWIP.get_filesize();
 
                 return true;
@@ -436,12 +436,12 @@ namespace REDFS_ClusterMode
             {
                 PrintableWIP pwip = rfcore.redfs_list_tree(myWIP, Array.Empty<long>(), Array.Empty<int>());
                 dsof.numFiles++;
-                dsof.numL0s = pwip.ondiskL0Blocks;
-                dsof.numL1s = pwip.ondiskL1Blocks;
-                dsof.numL2s = pwip.ondiskL2Blocks;
+                dsof.numL0s += pwip.ondiskL0Blocks;
+                dsof.numL1s += pwip.ondiskL1Blocks;
+                dsof.numL2s += pwip.ondiskL2Blocks;
                 dsof.totalLogicalData += myWIP.get_filesize();
+                return true;
             }
-            return false;
         }
         /*
          * Write out all the inmemory data

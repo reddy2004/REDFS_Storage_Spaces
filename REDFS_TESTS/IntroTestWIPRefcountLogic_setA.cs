@@ -235,6 +235,12 @@ namespace REDFS_TESTS
                 Assert.AreEqual(buffer[i], buffer2[i]);
             }
 
+            DebugSummaryOfFSID dsof1 = new DebugSummaryOfFSID();
+            DebugSummaryOfFSID dsof2 = new DebugSummaryOfFSID();
+
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetDebugSummaryOfFSID(dsof1);
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].GetDebugSummaryOfFSID(dsof2);
+
             CleanupTestContainer(containerName);
         }
     }

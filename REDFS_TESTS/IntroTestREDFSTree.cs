@@ -312,6 +312,9 @@ namespace REDFS_TESTS
 
             rftree.MoveInode(rfsid, "\\dir2\\dir2A\\dir2Ai", "\\dir1\\dir2Aj", false, true);
 
+            DebugSummaryOfFSID dsof = new DebugSummaryOfFSID();
+            rftree.GetDebugSummaryOfFSID(dsof);
+
             CleanupTestContainer(containerName);
         }
     }
