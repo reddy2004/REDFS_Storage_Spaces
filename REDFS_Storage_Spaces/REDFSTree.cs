@@ -93,17 +93,25 @@ namespace REDFS_ClusterMode
 
             rootDir.LoadWipForExistingInode(redfsCoreLocalCopy, inowip, 2, -1);
 
-            long inoFileSize = inowip.get_filesize();
-
             byte[] buffer = new byte[rootDir.myWIP.get_filesize()];
             redfsCoreLocalCopy.redfs_read(rootDir.myWIP, 0, buffer, 0, buffer.Length);
 
             string result = System.Text.Encoding.UTF8.GetString(buffer);
-            OnDiskDirectoryInfo oddi = JsonConvert.DeserializeObject<OnDiskDirectoryInfo>(result);
 
-            foreach (OnDiskInodeInfo item in oddi.inodes)
+            rootDir.cache_string = result;
+
+            try
             {
-                rootDir.items.Add(item.fileInfo.FileName);
+                OnDiskDirectoryInfo oddi = JsonConvert.DeserializeObject<OnDiskDirectoryInfo>(result);
+
+                foreach (OnDiskInodeInfo item in oddi.inodes)
+                {
+                    rootDir.items.Add(item.fileInfo.FileName);
+                }
+            } 
+            catch (Exception e)
+            {
+                throw new SystemException(e.Message);
             }
         }
 
@@ -365,6 +373,8 @@ namespace REDFS_ClusterMode
                 directory.AddNewInode(fileName);
                 directory.isDirty = true;
             }
+
+            redfsCoreLocalCopy.redfs_checkin_wip(inowip, newFile.myWIP, newInodeNum);
 
             //It will be marked dirty at time of syncTree also when we checkin the wip
             //at this point, ino wip is not actually modified. During syncTree, the tree item (object)

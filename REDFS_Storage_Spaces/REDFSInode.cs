@@ -108,8 +108,7 @@ namespace REDFS_ClusterMode
 
                 //Keep the json string in memory for debugging
                 byte[] buffer = new byte[myWIP.get_filesize()];
-                redfsCore.redfs_read(myWIP, 0, buffer, 0, buffer.Length);
-                string jsonString = Encoding.UTF8.GetString(buffer);               
+                redfsCore.redfs_read(myWIP, 0, buffer, 0, buffer.Length);          
             }
             touch_inode_obj();
         }
@@ -365,6 +364,7 @@ namespace REDFS_ClusterMode
                         child.FlushCacheL0s(redfsCore, allinodes);
                     }
                 }
+                redfsCore.flush_cache(myWIP, true);
             }
             else
             {
@@ -516,6 +516,18 @@ namespace REDFS_ClusterMode
                     string json = JsonConvert.SerializeObject(oddi, Formatting.None);
                     byte[] data = Encoding.UTF8.GetBytes(json);
 
+                    //quick inline test
+                    try
+                    {
+                        string testStr1 = System.Text.Encoding.UTF8.GetString(data);
+                        OnDiskDirectoryInfo oddiTest = JsonConvert.DeserializeObject<OnDiskDirectoryInfo>(testStr1);
+                        DEFS.ASSERT(testStr1 == json, "json encodings should match");
+                    }
+                    catch (Exception e)
+                    {
+                        DEFS.ASSERT(false, "some issue with json " + e.Message);
+                    }
+
                     cache_string = json;
 
                     if (myWIP.get_ino() == 64 || myWIP.get_ino() == 65)
@@ -556,9 +568,10 @@ namespace REDFS_ClusterMode
                 }
 
                 string json = JsonConvert.SerializeObject(oddi, Formatting.Indented);
+                cache_string = json;
                 byte[] data = Encoding.UTF8.GetBytes(json);
 
-                cache_string = json;
+                
 
                 redfsCore.redfs_write(myWIP, 0, data, 0, data.Length);
                 redfsCore.redfs_checkin_wip(inowip, myWIP, myWIP.get_ino());

@@ -65,7 +65,51 @@ namespace REDFS_ClusterMode
 
         //read in all the blocks requested by the called. useful for examining ondisk data.
         public List<Red_Buffer> requestedBlocks = new List<Red_Buffer>();
-        
+
+        public string json = "";
+
+        public Boolean IsSimilarTree(PrintableWIP other)
+        {
+            if (this.level != other.level || this.wipType != other.wipType || this.wipIdx.Length != other.wipIdx.Length)
+            {
+                return false;
+            }
+
+            if (this.L0_DBNS != null)
+            {
+                for (int l0 = 0; l0 < this.L0_DBNS.Length; l0++)
+                {
+                    if (this.L0_DBNS[l0] != other.L0_DBNS[l0])
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            if (this.L1_DBNS != null)
+            {
+                for (int l1 = 0; l1 < this.L1_DBNS.Length; l1++)
+                {
+                    if (this.L1_DBNS[l1] != other.L1_DBNS[l1])
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            if (this.wipIdx != null)
+            {
+                for (int w = 0; w < this.wipIdx.Length; w++)
+                {
+                    if (this.wipIdx[w] != other.wipIdx[w])
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
         public long getTotalOndiskBlocks()
         {
             return ondiskL0Blocks + ondiskL1Blocks + ondiskL2Blocks;
@@ -190,6 +234,44 @@ namespace REDFS_ClusterMode
         public int get_ino()
         {
             return get_int(WIDOffsets.wip_inoloc);
+        }
+
+        public void insert_buffer(ZBufferCache mFreeBufCache, int level, Red_Buffer wb)
+        {
+            List < Red_Buffer > list = null;
+            long start_fbn = wb.get_start_fbn();
+
+            switch (level)
+            {
+                case 0:
+                    list = L0list;
+                    break;
+                case 1:
+                    list = L1list;
+                    break;
+                case 2:
+                    list = L2list;
+                    break;
+            }
+             
+            foreach (Red_Buffer rb in list)
+            {
+                if (rb.get_start_fbn() == wb.get_start_fbn())
+                {
+                    DEFS.ASSERT(rb.is_dirty() == false, "cannot be dirty");
+                    DEFS.ASSERT(rb.get_ondisk_dbn() != wb.get_ondisk_dbn(), "Not utility cheeck!");
+
+                    if (level == 0)
+                    {
+                        mFreeBufCache.deallocate4((RedBufL0)rb, "insert_buffer:" + get_ino() + " cnt:" + L0list.Count);
+                    }
+                    list.Remove(rb);
+                    insert_buffer(mFreeBufCache, level, wb);
+                    return;
+                }
+            }
+
+            list.Add(wb);
         }
 
         public void sort_buflists()

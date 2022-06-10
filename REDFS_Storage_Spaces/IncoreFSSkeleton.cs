@@ -40,7 +40,7 @@ namespace REDFS_ClusterMode
             fSecurity = new FileInfo(@"Data/fSecurity.txt").GetAccessControl();
             dSecurity = new DirectoryInfo(@"Data/dSecurity").GetAccessControl();
             DokanSideMetrics.init();
-            DEFS.ASSERT(r != null, "should not be null");
+            DEFS.ASSERT(REDFS.isTestMode? true: r != null, "should not be null");
             rootDirectory = r;
         }
 
@@ -85,6 +85,12 @@ namespace REDFS_ClusterMode
             if (fileName == "")
             {
                 return DokanNet.DokanResult.Success;
+            }
+
+            if (fileName == "\\hello" && !rootDirectory.FileExists("\\12GBFile.dat"))
+            {
+                rootDirectory.CreateFile("\\12GBFile.dat");
+                rootDirectory.SetEndOfFile("\\12GBFile.dat", (long)12 * 1024 * 1024 * 1024, true);
             }
 
             if (fileName == "\\")
@@ -338,9 +344,9 @@ namespace REDFS_ClusterMode
 
         NtStatus IDokanOperations.GetDiskFreeSpace(out long freeBytesAvailable, out long totalNumberOfBytes, out long totalNumberOfFreeBytes, IDokanFileInfo info)
         {
-            freeBytesAvailable = 1024*1024*1024;
-            totalNumberOfBytes = 1024 * 1024 * 1024;
-            totalNumberOfFreeBytes = 1024 * 1024 * 1024;
+            freeBytesAvailable = (long)16 * 1024*1024*1024;
+            totalNumberOfBytes = (long)16 * 1024 * 1024 * 1024;
+            totalNumberOfFreeBytes = (long)16 * 1024 * 1024 * 1024;
             return DokanResult.Success;
         }
 

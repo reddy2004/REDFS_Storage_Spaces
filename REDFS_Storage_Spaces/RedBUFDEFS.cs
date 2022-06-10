@@ -33,6 +33,8 @@ namespace REDFS_ClusterMode
         void set_start_fbn(long fbn);
         void set_dirty(bool flag);
 
+        bool is_dirty();
+
         /*
          * This can be used in refcount adjustment logic.
          */
@@ -174,13 +176,15 @@ namespace REDFS_ClusterMode
         long Red_Buffer.get_start_fbn() { return m_start_fbn; }
         void Red_Buffer.set_start_fbn(long fbn) { m_start_fbn = fbn; }
         void Red_Buffer.set_dirty(bool flag) { is_dirty = flag; }
+
+        bool Red_Buffer.is_dirty() { return is_dirty; }
+
         bool Red_Buffer.does_exist_ondisk() { return m_exists_ondisk; }
         void Red_Buffer.set_ondisk_exist_flag(bool value) { m_exists_ondisk = value; }
         bool Red_Buffer.get_dbn_reassignment_flag() { return needdbnreassignment; }
         void Red_Buffer.set_dbn_reassignment_flag(bool v) { needdbnreassignment = v; }
         bool Red_Buffer.get_touchrefcnt_needed() { return needtouchbuf; }
         void Red_Buffer.set_touchrefcnt_needed(bool v) { needtouchbuf = v; }
-
         void Red_Buffer.touch() { creation_time = DateTime.Now.ToUniversalTime().Ticks; }
         public bool isTimetoClear()
         {
@@ -267,6 +271,8 @@ namespace REDFS_ClusterMode
         long Red_Buffer.get_start_fbn() { return m_start_fbn; }
         void Red_Buffer.set_start_fbn(long fbn) { m_start_fbn = fbn; }
         void Red_Buffer.set_dirty(bool flag) { is_dirty = flag; }
+
+        bool Red_Buffer.is_dirty() { return is_dirty; }
         bool Red_Buffer.does_exist_ondisk() { return m_exists_ondisk; }
         void Red_Buffer.set_ondisk_exist_flag(bool value) { m_exists_ondisk = value; }
         bool Red_Buffer.get_dbn_reassignment_flag() { return needdbnreassignment; }
@@ -370,6 +376,8 @@ namespace REDFS_ClusterMode
         long Red_Buffer.get_start_fbn() { return m_start_fbn; }
         void Red_Buffer.set_start_fbn(long fbn) { m_start_fbn = fbn; }
         void Red_Buffer.set_dirty(bool flag) { is_dirty = flag; }
+
+        bool Red_Buffer.is_dirty() { return is_dirty; }
         bool Red_Buffer.does_exist_ondisk() { return m_exists_ondisk; }
         void Red_Buffer.set_ondisk_exist_flag(bool value) { m_exists_ondisk = value; }
         bool Red_Buffer.get_dbn_reassignment_flag() { return needdbnreassignment; }

@@ -301,6 +301,10 @@ namespace REDFS_ClusterMode
             return wb;
         }
 
+        private void checkset_if_blockfree_batch(UpdateReqI cu)
+        {
+            throw new SystemException("not yet implimented!");
+        }
 
         //Update a batch of dbns that just got allocated. We dont know their use yet, just set the dbn refcount to 1
         private void apply_update_internal_batch(UpdateReqI cu)
@@ -336,21 +340,24 @@ namespace REDFS_ClusterMode
             int curr = GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(dbn);
             GLOBALQ.WRObj[rbn].incoretbuf.set_refcount(dbn, curr + value);
 
+            if (optype == REFCNT_OP.INCREMENT_REFCOUNT)
+            {
+                Console.WriteLine("debug here!");
+                DEFS.ASSERT(curr > 0, "we cannot increment ref without having some value");
+            }
 
             if (optype == REFCNT_OP.INCREMENT_REFCOUNT_ALLOC ||
                 optype == REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC)
             {
-                //DEFS.DEBUG("DSAF", "Apply update internal, " + optype + " : " + dbn + "," + value + "," + updatechild);
                 GLOBALQ.WRObj[rbn].incoretbuf.set_dedupe_overwritten_flag(dbn, true);
             }
 
             if (updatechild)
             {
-                if (type != BLK_TYPE.REGULAR_FILE_L0 && type != BLK_TYPE.IGNORE)
+                if ((type != BLK_TYPE.REGULAR_FILE_L0 && type != BLK_TYPE.IGNORE) || type == BLK_TYPE.PUBLIC_INODE_FILE_L0)
                 {
                     int currchd = GLOBALQ.WRObj[rbn].incoretbuf.get_childcount(dbn);
                     GLOBALQ.WRObj[rbn].incoretbuf.set_childcount(dbn, currchd + value);
-                    //DEFS.DEBUGCLR("/-0-0-/", "dbn,  " + dbn + "(" + curr + "->" + (curr + value) + ") (" + currchd + "->" + (currchd + value) + ")");
 
                     int currchd_verify = GLOBALQ.WRObj[rbn].incoretbuf.get_childcount(dbn);
                     DEFS.ASSERT((currchd + value) == currchd_verify, "Child refcount not writting out correctly!");
@@ -389,6 +396,11 @@ namespace REDFS_ClusterMode
                 long size = wip.get_filesize();
                 int inon = wip.get_ino();
                 String wipstr = wip.ToString();
+
+                if (inon == 0)
+                {
+                    continue;
+                }
 
                 switch (wip.get_inode_level())
                 {
@@ -435,7 +447,15 @@ namespace REDFS_ClusterMode
             switch (cu.blktype)
             {
                 case BLK_TYPE.REGULAR_FILE_L1:
-                    belowtype = BLK_TYPE.REGULAR_FILE_L0;
+                    switch (cu.inodeNumber)
+                    {
+                        case 0:
+                            belowtype = BLK_TYPE.PUBLIC_INODE_FILE_L0;
+                            break;
+                        default:
+                            belowtype = BLK_TYPE.REGULAR_FILE_L0;
+                            break;
+                    }
                     break;
                 case BLK_TYPE.REGULAR_FILE_L2:
                     belowtype = BLK_TYPE.REGULAR_FILE_L1;
@@ -580,9 +600,14 @@ namespace REDFS_ClusterMode
                 }
 
                 int childcnt = GLOBALQ.WRObj[rbn].incoretbuf.get_childcount(cu.dbn);
+                int refcnt = GLOBALQ.WRObj[rbn].incoretbuf.get_refcount (cu.dbn);
 
+                //if childcnt is there, we need to push the updates downwards before doing anything else.
+                //Add assert if possible.
                 if (childcnt > 0)
                 {
+                    Console.WriteLine("chdl cnt!");
+
                     //DEFS.DEBUG("CNTr", "Encountered child update for " + cu.dbn + " = " +
                     //    GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(cu.dbn) + "," + childcnt);
 
@@ -613,7 +638,7 @@ namespace REDFS_ClusterMode
                     }
                     else
                     {
-                        DEFS.ASSERT(false, "passed type = " + cu.blktype + "dbn = " + cu.dbn + " chdcnt = " + childcnt);
+                        //DEFS.ASSERT(false, "passed type = " + cu.blktype + "dbn = " + cu.dbn + " chdcnt = " + childcnt);
                     }
                 }
 
@@ -628,6 +653,7 @@ namespace REDFS_ClusterMode
                     if (cu.optype == REFCNT_OP.BATCH_INCREMENT_REFCOUNT_ALLOC)
                     {
                         apply_update_internal_batch(cu);
+                        checkset_if_blockfree_batch(cu);
                     }
                     else
                     {
@@ -703,31 +729,7 @@ namespace REDFS_ClusterMode
             childcnt = GLOBALQ.WRObj[rbn].incoretbuf.get_childcount(dbn);
         }
 
-        public void touch_refcount(int fsid, Red_Buffer wb, bool isinodefilel0)
-        {
-            DEFS.ASSERT(wb != null, "touch refcount needs the wb");
-
-            if (wb.get_touchrefcnt_needed() == false)// || wb.get_ondisk_dbn() == 0)
-            {
-                return;
-            }
-            else
-            {
-                wb.set_touchrefcnt_needed(false);
-            }
-
-            if (wb.get_level() == 0 && isinodefilel0)
-            {
-                mod_refcount(fsid, wb.get_ondisk_dbn(), REFCNT_OP.TOUCH_REFCOUNT, wb, true);
-            }
-            else
-            {
-                DEFS.ASSERT(wb.get_level() > 0, "touch_refcount is only for indirects only, except for ino-L0!");
-                mod_refcount(fsid, wb.get_ondisk_dbn(), REFCNT_OP.TOUCH_REFCOUNT, wb, false);
-            }
-        }
-
-        public void mod_refcount(int fsid, long dbn, REFCNT_OP optype, Red_Buffer wb, bool isinodefilel0)
+        public void mod_refcount(int fsid, int ino, long dbn, REFCNT_OP optype, Red_Buffer wb, bool isinodefilel0)
         {
             DEFS.ASSERT(optype == REFCNT_OP.INCREMENT_REFCOUNT || /*optype == REFCNT_OP.DECREMENT_REFCOUNT ||*/
                     optype == REFCNT_OP.TOUCH_REFCOUNT || /*optype == REFCNT_OP.DO_LOAD || */
@@ -735,17 +737,31 @@ namespace REDFS_ClusterMode
                     optype == REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC || 
                     optype == REFCNT_OP.BATCH_INCREMENT_REFCOUNT_ALLOC, "Wrong param in mod_refcount");
 
-            DEFS.ASSERT(isinodefilel0 || (wb == null || wb.get_level() > 0), "wrong type to mod_refcount " + isinodefilel0 + (wb == null));
-
-            if (dbn > 10000000) //for sake of testing
+            if (optype == REFCNT_OP.TOUCH_REFCOUNT)
             {
-                Console.WriteLine("Catching for debug");
+                DEFS.ASSERT(wb != null, "WB cannot be null in touch refcount!");
+                if (wb.get_touchrefcnt_needed() == false || wb.get_ondisk_dbn() == 0)
+                {
+                    return;
+                }
+                else
+                {
+                    wb.set_touchrefcnt_needed(false);
+                }
+
+                if (!(wb.get_level() == 0 && isinodefilel0))
+                {
+                    DEFS.ASSERT(wb.get_level() > 0, "touch_refcount is only for indirects only, except for ino-L0!");
+                }
             }
+            //same check as above no non-touch command
+            DEFS.ASSERT(isinodefilel0 || (wb == null || wb.get_level() > 0), "wrong type to mod_refcount " + isinodefilel0 + (wb == null));
 
             UpdateReqI r = new UpdateReqI();
             r.optype = optype;
             r.dbn = dbn;
             r.fsid = fsid;
+            r.inodeNumber = ino;
 
             switch (optype)
             {
@@ -791,6 +807,11 @@ namespace REDFS_ClusterMode
             }
 
             r.who = "mod_refcnt (fsid:" + fsid + ", dbn:"+ dbn + ",optype:" + optype.ToString() + ",wb:" + (wb == null) + ",isinodefileL0:" + isinodefilel0 + ")";
+            if (msgs.Count > 256)
+            {
+                msgs.RemoveRange(0, 128);
+            }
+            msgs.Add(r.who);
             GLOBALQ.m_reqi_queue.Add(r);
         }
     }

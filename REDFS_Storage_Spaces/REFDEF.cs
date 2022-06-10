@@ -552,7 +552,7 @@ namespace REDFS_ClusterMode
         public int tfbn; /* the fbn of the transaction file */
         public bool processed;
         public bool deleted_sucessfully;
-
+        public int inodeNumber; //can be 0 or something else, if its -1, dont count it.
         public string who;
     }
 

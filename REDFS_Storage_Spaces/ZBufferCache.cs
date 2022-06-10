@@ -69,6 +69,7 @@ namespace REDFS_ClusterMode
             {
                 iStackTop++;
                 iStack[iStackTop] = wb;
+ 
             }
         }
     }

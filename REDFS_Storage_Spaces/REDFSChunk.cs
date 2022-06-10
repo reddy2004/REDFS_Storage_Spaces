@@ -996,7 +996,6 @@ namespace REDFS_ClusterMode
                 if (isSpanMapOkay())
                 {
                     int segmentOffset = DBNSegmentSpan.GetDBNSpaceSegmentOffset(start_dbn);
-                    Console.WriteLine("seg offset = " + segmentOffset + " for " + start_dbn);
                     if (startDBNToDBNSegmentSpan[segmentOffset] != null)
                     {
                         return startDBNToDBNSegmentSpan[segmentOffset];

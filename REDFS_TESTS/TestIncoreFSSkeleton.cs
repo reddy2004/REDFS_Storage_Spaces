@@ -24,6 +24,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestIFSInit()
         {
+            REDFS.isTestMode = true;
             IncoreFSSkeleton ifs = new IncoreFSSkeleton(null);
             Assert.IsTrue(ifs != null);
         }

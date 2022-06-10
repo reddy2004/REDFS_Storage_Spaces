@@ -12,12 +12,9 @@ The stripe hole can only filled by background scanners, wich we are offline.
 trying to write to the third block creating race conditions.
 
 
-Items
-When using webui, clone does not work. file seem to disappear and we start again with new dir.
-Unmount container from webui causing fatal - not all bufs are recovered.
-
-Files are becoming zero sized after container unmount/remount
-volume id not being assigned correctly
-
-
 Add autoload script as json input to reduce testing time.
+
+
+1. There is an issue where wip has dbn as 1000 while inL0list we have dbn as 1001, and as we use get_buf() to search by start_fbn this discrepency is
+not addressed. Essentially we could have a "start_fbn" block which some old dbn which is stale while wip (or its indirect) has something different.
+We have to purge these stale blocks from memeory.

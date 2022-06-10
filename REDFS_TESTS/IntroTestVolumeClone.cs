@@ -199,17 +199,72 @@ namespace REDFS_TESTS
                 }
             }
 
+            //Take the ref since we have done a reload of ReloadAllFSIDs();
+            rftree = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1];
             DebugSummaryOfFSID dsof = new DebugSummaryOfFSID();
             rftree.GetDebugSummaryOfFSID(dsof);
+
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].FlushCacheL0s();
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
 
             Assert.AreEqual(nonZeroDbns, 1); //for root directory which was written out.
             CleanupTestContainer(containerName);
         }
 
+        private void CreateCloneOfNewVolumeAndVerify()
+        {
+            REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
+
+            int[] refs;
+            int[] childrefs;
+
+            //Clone volume using volumeManager, Do not try to clone using dup_fsid as it wont keep track of the volumes
+            //in volumeManager.
+            PrintableWIP rootDirSrc = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+            PrintableWIP inoFileSrc = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("test"), new long[] { 0 }, new int[] { 0 });
+            rfcore.redfs_get_refcounts(rootDirSrc.wipIdx, out refs, out childrefs);
+
+            //helps to drain out the queue in wrloader
+            rfcore.redfs_get_refcounts(new long[] { 1048, 1049, 1050, 1052 }, out refs, out childrefs);
+
+            REDFS.redfsContainer.volumeManager.CloneVolumeRaw(1, "cloneOfFirstVol", "Testing", "#000000");
+            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.numValidFsids == 3);
+
+            rfcore.redfs_get_refcounts(new long[] { 1048, 1049, 1050, 1052 }, out refs, out childrefs);
+
+            PrintableWIP rootDirSrcAfter = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+
+            //Check the ino wip for fsid 2 and 1
+            PrintableWIP inoFileSrcAfter = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("test"), new long[] { 0 }, new int[] { 0 });
+            PrintableWIP inoFileDest = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.FSIDList[2].get_inode_file_wip("test"), new long[] { 0 }, new int[] { 0 });
+            PrintableWIP rootDirDest = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+
+            Assert.IsTrue(rootDirSrc.IsSimilarTree(rootDirSrcAfter));
+            Assert.IsTrue(rootDirSrc.IsSimilarTree(rootDirDest));
+
+
+            Assert.IsTrue(inoFileSrc.IsSimilarTree(inoFileSrcAfter));
+            Assert.IsTrue(inoFileSrc.IsSimilarTree(inoFileDest));
+
+
+
+            rfcore.redfs_get_refcounts(inoFileSrc.L0_DBNS, out refs, out childrefs);
+            rfcore.redfs_get_refcounts(inoFileSrc.L1_DBNS, out refs, out childrefs);
+
+            rfcore.redfs_get_refcounts(inoFileDest.L0_DBNS, out refs, out childrefs);
+            rfcore.redfs_get_refcounts(inoFileDest.L1_DBNS, out refs, out childrefs);
+
+            rfcore.redfs_get_refcounts(rootDirSrc.wipIdx, out refs, out childrefs);
+
+            REDFS.redfsContainer.ReloadAllFSIDs();
+
+        }
+
         /*
          * Same as the introtest_7 above, but this time we will do clones of clones and write out some empty files
          * and validate that they are distinct in each fsid and also inode and data refcounts reflect accordingly.
-         */ 
+         */
         [TestMethod]
         public void IntroTest_8()
         {
@@ -220,23 +275,28 @@ namespace REDFS_TESTS
 
             CreateCloneOfZeroVolume();
 
+            int refcnt2a = 0, childrefcnt2a = 0;
             Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.numValidFsids == 2);
 
-            //Objects of interest
-            RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[1];
-            REDFSTree rftree = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1];
+            CreateCloneOfNewVolumeAndVerify();
+
             REDFSCore rfcore = REDFS.redfsContainer.ifsd_mux.redfsCore;
 
-            //Clone volume using volumeManager, Do not try to clone using dup_fsid as it wont keep track of the volumes
-            //in volumeManager.
-            REDFS.redfsContainer.volumeManager.CloneVolumeRaw(1, "cloneOfFirstVol", "Testing", "#000000");
-            REDFS.redfsContainer.ReloadAllFSIDs();
+            //Get root dirs of both fsid 1 and 2
+            PrintableWIP pwip2b = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+            PrintableWIP pwip2bx = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
 
             RedFS_FSID rfsid_clone = REDFS.redfsContainer.ifsd_mux.FSIDList[2];
             Assert.AreEqual(rfsid_clone.get_fsid(), 2);
 
-            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.numValidFsids == 3);
-            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2] != null);
+            //Check the ino wip for fsid 2 and 1
+            PrintableWIP pwipino1 = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("test"), new long[] { 0 }, new int[] { 0 }); 
+            PrintableWIP pwipino2 =  rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.FSIDList[2].get_inode_file_wip("test"), new long[] { 0 }, new int[] { 0 });
+
+            Assert.IsTrue(pwipino1.IsSimilarTree(pwipino2));
+
+
+            //So far so good.
 
             //Now create a few files and write out some data. We will create OPS.FS_SPAN_OUT*OPS.NUM_WIPS_IN_BLOCK + 1 inodes in the cloned volume
             //so that the inodefile has two blocks worth of data and hence two L1 dbns will be cowed.
@@ -247,11 +307,25 @@ namespace REDFS_TESTS
                 Random r = new Random();
                 r.NextBytes(buffer);
                 REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].CreateFile("\\tempfile.dat." + fileid);
+
                 REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].WriteFile("\\tempfile.dat." + fileid, buffer, out bytesWritten, 0);
+
             }
+
+            PrintableWIP pwip2c1 = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+
             Thread.Sleep(1000);
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].SyncTree();
+            REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
+
+
+            PrintableWIP pwip2c2 = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+
+            rfcore.redfsBlockAllocator.GetRefcounts(1024, ref refcnt2a, ref childrefcnt2a);
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].SyncTree();
+            rfcore.redfsBlockAllocator.GetRefcounts(1024, ref refcnt2a, ref childrefcnt2a);
+
+            PrintableWIP pwip2c = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
 
             RedFS_Inode myWIP1 = REDFS.redfsContainer.ifsd_mux.FSIDList[1].get_inode_file_wip("tester");
             RedFS_Inode myWIP2 = REDFS.redfsContainer.ifsd_mux.FSIDList[2].get_inode_file_wip("tester");
@@ -285,7 +359,7 @@ namespace REDFS_TESTS
                 int refcnt2 = 0, childrefcnt2 = 0;
                 rfcore.redfsBlockAllocator.GetRefcounts(dbn2, ref refcnt2, ref childrefcnt2);
 
-                //Since the first L2 dbn stored in wip has been cow;d
+                //Since the first L2 dbn stored in wip has been cow;d and rest have been touched!
                 if (i == 0)
                 {
                     Assert.AreEqual(1, refcnt2);
@@ -332,9 +406,41 @@ namespace REDFS_TESTS
                     nonZeroDbns++;
                 }
             }
+
+
+            PrintableWIP pwip2d = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+
+
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].FlushCacheL0s();
             REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].FlushCacheL0s();
             Assert.AreEqual(nonZeroDbns, 3); //for root directory which was written out.
+
+            Thread.Sleep(50000);
+
+            REDFS.redfsContainer.volumeManager.CloneVolumeRaw(2, "cloneOfSecondVol", "Testing", "#000000");
+            PrintableWIP pwip3a = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+
+            PrintableWIP pwip2m2 = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+            PrintableWIP pwip2m3 = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[3].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+
+            REDFS.redfsContainer.ReloadAllFSIDs();
+            PrintableWIP pwip3b = rfcore.redfs_list_tree(REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].GetInode("\\").myWIP, new long[] { 0 }, new int[] { 0 });
+
+            RedFS_FSID rfsid_clone_again = REDFS.redfsContainer.ifsd_mux.FSIDList[3];
+            
+            DebugSummaryOfFSID dsof3 = new DebugSummaryOfFSID();
+            DebugSummaryOfFSID dsof2 = new DebugSummaryOfFSID();
+            //REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[3].GetDebugSummaryOfFSID(dsof3);
+            //REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[2].GetDebugSummaryOfFSID(dsof2);
+
+            Assert.AreEqual(dsof3.numDirectories, dsof2.numDirectories);
+            Assert.AreEqual(dsof3.numFiles, dsof2.numFiles);
+            Assert.AreEqual(dsof3.numL0s, dsof2.numL0s);
+            Assert.AreEqual(dsof3.numL1s, dsof2.numL1s);
+            Assert.AreEqual(dsof3.numL2s, dsof2.numL2s);
+            Assert.AreEqual(dsof3.totalLogicalData, dsof2.totalLogicalData);
+            
+
             CleanupTestContainer(containerName);
         }
     }

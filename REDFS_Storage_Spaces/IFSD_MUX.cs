@@ -99,6 +99,7 @@ namespace REDFS_ClusterMode
                             {
                                 redfsCore.redFSPersistantStorage.write_fsid(FSIDList[i]);
                             }
+                            RedfsVolumeTrees[i].FlushCacheL0s();
                         }
                         catch (Exception e)
                         {
@@ -254,10 +255,6 @@ namespace REDFS_ClusterMode
                         {
                             try
                             {
-                                if (i != 0)
-                                {
-                                    RedfsVolumeTrees[i].SyncTree();
-                                }
                                 do_fsid_sync_internal(i);
                             }
                             catch (Exception e)
@@ -276,10 +273,19 @@ namespace REDFS_ClusterMode
                         try
                         {
                             FSIDList[v.volumeId] = redfsCore.redFSPersistantStorage.read_fsid(v.volumeId);
-                            RedfsVolumeTrees[v.volumeId] = new REDFSTree(FSIDList[v.volumeId], redfsCore);
-                            if (v.volumeId != 0)
+
+                            try
                             {
-                                RedfsVolumeTrees[v.volumeId].LoadRootDirectory();
+                                RedfsVolumeTrees[v.volumeId] = new REDFSTree(FSIDList[v.volumeId], redfsCore);
+                                if (v.volumeId != 0)
+                                {
+                                    RedfsVolumeTrees[v.volumeId].LoadRootDirectory();
+                                }
+                            } 
+                            catch (Exception e)
+                            {
+                                Console.WriteLine(e.Message);
+                                throw new SystemException(e.Message);
                             }
                         }
                         catch (Exception e)

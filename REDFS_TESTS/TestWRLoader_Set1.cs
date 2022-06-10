@@ -116,7 +116,7 @@ namespace REDFS_TESTS
             WRLoader wrloader = REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.refCountMap;
             Thread.Sleep(1000);
 
-            wrloader.mod_refcount(0, 100, REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
+            wrloader.mod_refcount(0, -1, 100, REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
             
             int refcnt=0, childcnt=0;
             wrloader.get_refcount(100, ref refcnt, ref childcnt);
@@ -124,7 +124,7 @@ namespace REDFS_TESTS
             Assert.AreEqual(1, refcnt);
             Assert.AreEqual(0, childcnt);
             
-            wrloader.mod_refcount(0, 100, REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
+            wrloader.mod_refcount(0, -1, 100, REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
             wrloader.get_refcount(100, ref refcnt, ref childcnt);
 
             Console.WriteLine("(refcount, childcnt)" + refcnt + "," + childcnt);

@@ -236,7 +236,7 @@ namespace REDFS_ClusterMode
             for (int i= dbnsDone; i<dbns.Length;i++)
             {
                 //Now we have the list of dbns, lets set the refcount information.
-                refCountMap.mod_refcount(fsid, dbns[i], REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
+                refCountMap.mod_refcount(fsid, -1, dbns[i], REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
             }
 
             quickSearchStartFbn[(int)spanType] = dbns[dbns.Length - 1];
@@ -248,9 +248,9 @@ namespace REDFS_ClusterMode
          * Propogate the child refs to the corresponding child dbns
          * to be fixed
          */ 
-        public void touch_refcount(int fsid, Red_Buffer wb, bool isinodefilel0)
+        public void touch_refcount(int fsid, int ino, Red_Buffer wb, bool isinodefilel0)
         {
-            refCountMap.touch_refcount(fsid, wb, isinodefilel0);
+            refCountMap.mod_refcount(fsid, ino, wb.get_ondisk_dbn(), REFCNT_OP.TOUCH_REFCOUNT, wb, isinodefilel0);
         }
 
         /*
@@ -261,7 +261,7 @@ namespace REDFS_ClusterMode
          */
         public void mod_refcount(int fsid, long dbn, REFCNT_OP optype, Red_Buffer wb, bool isinodefilel0)
         {
-            refCountMap.mod_refcount(fsid, dbn, optype, wb, isinodefilel0);
+            refCountMap.mod_refcount(fsid, -1, dbn, optype, wb, isinodefilel0);
         }
 
         public void decrement_refcount_ondealloc(int fsid, long dbn)
@@ -272,7 +272,7 @@ namespace REDFS_ClusterMode
              * other one - no probs.
              * We need this, we dont want to load the actual L0 wb's when deleting!!
              */
-            refCountMap.mod_refcount(fsid, dbn, REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC, null, false);
+            refCountMap.mod_refcount(fsid, -1, dbn, REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC, null, false);
         }
 
         /*
@@ -280,20 +280,20 @@ namespace REDFS_ClusterMode
          */ 
         public void batch_increment_refcount_on_alloc(int fsid, RedBufL1 wbL1)
         {
-            refCountMap.mod_refcount(fsid, 0, REFCNT_OP.BATCH_INCREMENT_REFCOUNT_ALLOC, wbL1, false);
+            refCountMap.mod_refcount(fsid, -1, 0, REFCNT_OP.BATCH_INCREMENT_REFCOUNT_ALLOC, wbL1, false);
         }
 
         public void increment_refcount_onalloc(int fsid, long dbn)
         {
-            refCountMap.mod_refcount(fsid, dbn, REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
+            refCountMap.mod_refcount(fsid, -1, dbn, REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
         }
 
         /*
          * Used while duping fsid
          */ 
-        public void increment_refcount(int fsid, Red_Buffer wb, bool isinodefilel0)
+        public void increment_refcount(int fsid, int ino, Red_Buffer wb, bool isinodefilel0)
         {
-            refCountMap.mod_refcount(fsid, wb.get_ondisk_dbn(), REFCNT_OP.INCREMENT_REFCOUNT, wb, isinodefilel0);
+            refCountMap.mod_refcount(fsid, ino, wb.get_ondisk_dbn(), REFCNT_OP.INCREMENT_REFCOUNT, wb, isinodefilel0);
         }
 
         public void GetRefcounts(long dbn, ref int refcount, ref int childrefcount)
