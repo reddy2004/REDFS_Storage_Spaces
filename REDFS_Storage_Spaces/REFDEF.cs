@@ -575,10 +575,13 @@ namespace REDFS_ClusterMode
     public class GLOBALQ
     {
         public static BlockingCollection<UIUpdateMessage> m_ux_update = new BlockingCollection<UIUpdateMessage>(1024);
-        public static BlockingCollection<UpdateReqI> m_reqi_queue = new BlockingCollection<UpdateReqI>(4194304);
-        public static BlockingCollection<RedFS_Inode> m_wipdelete_queue = new BlockingCollection<RedFS_Inode>(524288);
-
+        public static BlockingCollection<UpdateReqI> m_reqi_queue = new BlockingCollection<UpdateReqI>(1048576);
+        public static BlockingCollection<RedFS_Inode> m_wipdelete_queue = new BlockingCollection<RedFS_Inode>(32768);
+        
+        
         public static List<long> m_deletelog2 = new List<long>();
+        //public static List<long> m_deletelog3 = new List<long>();
+
         public static List<long> m_deletelog_spanmap = new List<long>();
 
         public static WRContainer[] WRObj = new WRContainer[4194304 * 16]; //Each WRobj has 512 refs for 8k blocks, total per wrobj is 4MB. Hence 256TB

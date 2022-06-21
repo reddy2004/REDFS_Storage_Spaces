@@ -291,7 +291,7 @@ namespace REDFS_ClusterMode
                         catch (Exception e)
                         {
                             Console.WriteLine(e.Message);
-                            throw new SystemException("Error in inowip size duing reload!" + e.Message);
+                            throw new SystemException("Error in inowip size/contents duing reload!" + e.Message);
                         }
                     }
                     else

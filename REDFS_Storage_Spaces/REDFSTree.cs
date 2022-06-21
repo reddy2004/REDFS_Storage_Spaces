@@ -587,7 +587,14 @@ namespace REDFS_ClusterMode
                 DEFS.ASSERT(rfi != null && rfi.isDirectory(), "Should be a directory!");
 
                 rfi.items.Remove(finalComponent);
+
+                REDFSInode rfi2 = (REDFSInode)inodes[path];
                 inodes.Remove(path);
+
+                RedFS_Inode mywip = rfi2.myWIP;
+                redfsCoreLocalCopy.sync(rfi2.myWIP);
+                redfsCoreLocalCopy.redfs_delete_wip(fsidLocalCopy.get_fsid(), mywip, true);
+
                 rfi.isDirty = true;
                 return true;
             }

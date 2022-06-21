@@ -91,7 +91,6 @@ namespace REDFS_ClusterMode
 
         private int dbn_to_mbufoffset(long dbn) 
         {
-            //return (int)(dbn % OPS.SIZE_OF_MAPBUFS) / 8;
             return (int)(dbn % MapBuffer.NUM_BITS_IN_MBUF) / 8;
         }
 
@@ -152,7 +151,12 @@ namespace REDFS_ClusterMode
                         {
                             long dbn = GLOBALQ.m_deletelog2.ElementAt(0);
                             GLOBALQ.m_deletelog2.RemoveAt(0);
+
                             free_bit(dbn);
+
+                            GLOBALQ.m_deletelog_spanmap.Add(dbn);
+                            REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.USED_BLOCK_COUNT, USED_BLK_COUNT); //trails by 1 unit
+
                         }
                     }
                     catch (Exception e)
@@ -275,7 +279,7 @@ namespace REDFS_ClusterMode
 
         //int test_quick_alloc = 1024;
 
-        public long[] allocate_Dbns(long start_dbn, long end_dbn, int num_dbns)
+        public long[] allocate_Dbns(long start_dbn_computed, long start_dbn, long end_dbn, int num_dbns)
         {
             if (!initialized) return Array.Empty<long>();
 
@@ -290,10 +294,18 @@ namespace REDFS_ClusterMode
 
                 int sidx = dbn_to_mbufidx(start_dbn);
                 int eidx = dbn_to_mbufidx(end_dbn);
+
+                REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.DBN_ALLOC_MS_1, 1);
+
                 for (int idx = sidx; idx <= eidx; idx++)
                 {
-                    long sdbn = start_dbn;// + idx*MapBuffer.NUM_BITS_IN_MBUF;
+                    long sdbn = start_dbn + idx*MapBuffer.NUM_BITS_IN_MBUF;
                     load_mbx(idx, false);
+
+                    if (start_dbn_computed - sdbn < MapBuffer.NUM_BITS_IN_MBUF)
+                    {
+                        sdbn = start_dbn_computed; //start higher
+                    }
 
                     for (long dbn = sdbn; dbn < ((idx + 1) * MapBuffer.NUM_BITS_IN_MBUF); dbn++)
                     {
@@ -323,11 +335,13 @@ namespace REDFS_ClusterMode
                         }
                         else
                         {
+                            REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.DBN_ALLOC_MS_2, 1);
                             //go dbn by dbn
                             if (alloc_bit_internal(dbn))
                             {
                                 allocatedDbns[counter++] = dbn;
                             }
+                            REDFSCoreSideMetrics.m.StopMetric(METRIC_NAME.DBN_ALLOC_MS_2, 1);
                         }
                         if (counter >= num_dbns)
                         {
@@ -341,6 +355,8 @@ namespace REDFS_ClusterMode
                 {
                     dealloc_bit_internal(allocatedDbns[i]);
                 }
+
+                REDFSCoreSideMetrics.m.StopMetric(METRIC_NAME.DBN_ALLOC_MS_1, 1);
             }
             return Array.Empty<long>();
         }

@@ -42,6 +42,7 @@ namespace REDFS_ClusterMode
             mFreeBufCache.init();
 
             Thread tc = new Thread(new ThreadStart(tServiceThread));
+            tc.Start();
         }
 
         //for testing helper functions. Do not create threads or the blockAllocator or persistant storage.
@@ -56,16 +57,79 @@ namespace REDFS_ClusterMode
          */
         public void tServiceThread()
         {
+
             while (!mTerminateThread)
             {
                 RedFS_Inode wip = (RedFS_Inode)GLOBALQ.m_wipdelete_queue.Take();
                 if (wip.get_ino() == -1)
                 {
-                    break;
+                    mTerminateThread = true;
                 }
                 else
                 {
-                    delete_wip_internal2(wip);
+                    int deallocs = delete_wip_internal2(wip);
+                    Thread.Sleep(100); //wait to drain
+                    Console.WriteLine("Num deallocs = " + deallocs);
+                    /*
+                    //PrintableWIP pwip = redfs_list_tree(wip, new long[] { }, new int[] { });
+
+
+                    //Thread.Sleep(10000); //wait to drain
+                    int numFreeBlocks = 0;
+                    for (long dbn=OPS.MIN_ALLOCATABLE_DBN; dbn < OPS.NUM_DBNS_IN_1GB * 2; dbn++)
+                    {
+                        int refcnt1 = 0, childrefcnt1 = 0;
+                        redfsBlockAllocator.GetRefcounts(dbn, ref refcnt1, ref childrefcnt1);
+                        if (refcnt1 == 0)
+                        {
+                            numFreeBlocks++;
+                        }
+                    }
+                    Console.WriteLine("num free blocks! = " + numFreeBlocks);
+                    */
+                }
+
+                //not critical if we shutdown without processing this queue, but will lead to leakage
+
+                //XXX regular frees may bring out random dbns which cause the dbn to be reset and then which slows
+                //down say an ongoing copying process.
+                /*
+                do
+                {
+                    
+                    lock (GLOBALQ.m_deletelog3)
+                    {
+                        int count = GLOBALQ.m_deletelog3.Count;
+                        try
+                        {
+                            for (int i = 0; i < count; i++)
+                            {
+                                long freedbn = GLOBALQ.m_deletelog3[0];
+                                GLOBALQ.m_deletelog3.RemoveAt(0);
+
+
+                                DBNSegmentSpan segment = redfsBlockAllocator.dbnSpanMap.startDBNToDBNSegmentSpan[DBNSegmentSpan.GetDBNSpaceSegmentOffset(freedbn)];
+                                DEFS.ASSERT(segment.type == SPAN_TYPE.DEFAULT, "should be default as of now!");
+
+                                if (redfsBlockAllocator.quickSearchStartDbn[0] > freedbn)
+                                {
+                                    redfsBlockAllocator.quickSearchStartDbn[0] = freedbn;
+                                }
+                                segment.totalFreeBlocks++;
+                                totalFreedBlocks++;
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            throw new SystemException("EXEPTION : Caught in m_deletelog3 : cnt = " + count + " and size = " +
+                                GLOBALQ.m_deletelog3.Count + " e.msg = " + e.Message);
+                        }
+                    }
+                } while (GLOBALQ.m_deletelog3.Count > 0);
+                */
+                if (mTerminateThread)
+                {
+                    break;
                 }
             }
             mThreadTerminated = true;
@@ -87,8 +151,15 @@ namespace REDFS_ClusterMode
                 dataDefault1[0] = new RAWSegment(SEGMENT_TYPES.Default, 0, 1);
 
                 DBNSegmentSpan dss1 = new DBNSegmentSpan(SPAN_TYPE.DEFAULT, 0, dataDefault1, null);
+
+                RAWSegment[] dataDefault2 = new RAWSegment[1];
+                dataDefault2[0] = new RAWSegment(SEGMENT_TYPES.Default, 0, 2);
+                DBNSegmentSpan dss2 = new DBNSegmentSpan(SPAN_TYPE.DEFAULT, OPS.NUM_DBNS_IN_1GB, dataDefault2, null);
+
                 DBNSegmentSpanMap spanMap = REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap;
                 spanMap.InsertDBNSegmentSpan(dss1);
+                spanMap.InsertDBNSegmentSpan(dss2);
+
             }
             RedFS_FSID wbfsid  = CreateEmptyFSID(0);
             redFSPersistantStorage.write_fsid(wbfsid);
@@ -660,11 +731,13 @@ namespace REDFS_ClusterMode
         // Then i will have to pass the indirect + its dbn first for the refcounts to be propogated downward.
         // After that i can reduce the refcount of the L1
 
-        private void delete_wip_internal2(RedFS_Inode wip)
+        private int delete_wip_internal2(RedFS_Inode wip)
         {
             DEFS.ASSERT(wip.L0list.Count == 0, "delete_wip_internal2 shouldve flushed cached, L0");
             DEFS.ASSERT(wip.L1list.Count == 0, "delete_wip_internal2 shouldve flushed cached, L1");
             DEFS.ASSERT(wip.L2list.Count == 0, "delete_wip_internal2 shouldve flushed cached, L2");
+
+            int numDeallocsCalled = 0;
 
             if (wip.get_inode_level() == 0)
             {
@@ -672,7 +745,11 @@ namespace REDFS_ClusterMode
                 {
                     long dbnl0 = wip.get_child_dbn(i);
                     DEFS.ASSERT(dbnl0 != DBN.INVALID, "Invalid dbn found in valid dbn range!");
-                    redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbnl0);
+                    if (dbnl0 > 0)
+                    {
+                        redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbnl0);
+                        numDeallocsCalled++;
+                    }
                 }
             }
             else if (wip.get_inode_level() == 1)
@@ -683,16 +760,21 @@ namespace REDFS_ClusterMode
                     RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(wip, 1, OPS.PIDXToStartFBN(1, i), false);
                     int idx = 0;
                     redfsBlockAllocator.touch_refcount(wip.get_filefsid(), wip.get_ino(), wbl1, false);
-                    while (counter > 0 && idx < 1024)
+                    while (counter > 0 && idx < OPS.FS_SPAN_OUT)
                     {
                         long dbnl0 = wbl1.get_child_dbn(idx);
                         DEFS.ASSERT(dbnl0 != DBN.INVALID, "Invalid dbn found in valid dbn range!");
-                        redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbnl0);
+                        if (dbnl0 > 0)
+                        {
+                            redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbnl0);
+                            numDeallocsCalled++;
+                        }
                         counter--;
                         idx++;
                     }
-                    DEFS.ASSERT(wbl1.m_dbn != DBN.INVALID, "Invalid dbn found in valid dbn range!");
+                    DEFS.ASSERT(wbl1.m_dbn != DBN.INVALID && wbl1.m_dbn > 0, "Invalid dbn found in valid dbn range!");
                     redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wbl1.m_dbn);
+                    numDeallocsCalled++;
                 }
             }
             else if (wip.get_inode_level() == 2)
@@ -716,17 +798,27 @@ namespace REDFS_ClusterMode
                         {
                             long dbnl0 = wbl1.get_child_dbn(idx);
                             DEFS.ASSERT(dbnl0 != DBN.INVALID, "Invalid dbn found in valid dbn range!");
-                            redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbnl0);
+                            if (dbnl0 > 0)
+                            {
+                                redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbnl0);
+                                numDeallocsCalled++;
+                            }
                             counter--;
                             idx++;
                         }
-                        DEFS.ASSERT(wbl1.m_dbn != DBN.INVALID, "Invalid dbn found in valid dbn range!");
+                        DEFS.ASSERT(wbl1.m_dbn != DBN.INVALID && wbl1.m_dbn > 0, "Invalid dbn found in valid dbn range!");
                         redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wbl1.m_dbn);
+                        numDeallocsCalled++;
                     }
 
+                    DEFS.ASSERT(wbl2.m_dbn != DBN.INVALID && wbl2.m_dbn > 0, "Invalid dbn found in valid dbn range!");
                     redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wbl2.m_dbn);
+                    numDeallocsCalled++;
                 }
             }
+
+            Console.WriteLine("numDeallocsCalled = " + numDeallocsCalled);
+            return numDeallocsCalled;
         }
 
         /*
@@ -1062,7 +1154,7 @@ namespace REDFS_ClusterMode
 
         private void do_fast_read(RedFS_Inode wip, long fbn, byte[] buffer, int offset)
         {
-            RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(wip, 1, fbn, true);
+            RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(wip, 1, fbn, false);
             int idx = OPS.myidx_in_myparent(0, fbn);
             long dbn0 = wbl1.get_child_dbn(idx);
 
@@ -1075,31 +1167,38 @@ namespace REDFS_ClusterMode
         //does not work correctly yet, but very fast > 60 Mbps
         private void do_fast_write(RedFS_Inode wip, long fbn, byte[] buffer, int offset)
         {
+            REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.FASTWRITE_LATENCY_MS, offset);
+
             DEFS.ASSERT(wip.spanType == SPAN_TYPE.MIRRORED || wip.spanType == SPAN_TYPE.DEFAULT, "Fast write does not work for raid5 stripes");
 
+            REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.LOADBUF_LATENCY_MS, offset);
             RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(wip, 1, fbn, true);
+            REDFSCoreSideMetrics.m.StopMetric(METRIC_NAME.LOADBUF_LATENCY_MS, offset);
 
-            if (!wbl1.is_dirty &&  wbl1.needdbnreassignment && wbl1.m_dbn != 0 && wbl1.m_dbn != DBN.INVALID)
+            //if (!wbl1.is_dirty &&  wbl1.needdbnreassignment && wbl1.m_dbn != 0 && wbl1.m_dbn != DBN.INVALID)
+            //{
+            //    redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wbl1.m_dbn);
+            //}
+
+            if (wbl1.m_dbn == 0)
             {
-                redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wbl1.m_dbn);
+                wbl1.m_dbn = redfsBlockAllocator.allocateDBN(wip, wip.spanType);
+                wbl1.is_dirty = true;
             }
 
-            //if (wbl1.m_dbn == 0)
-            //{
-                wbl1.m_dbn = redfsBlockAllocator.allocateDBN(wip.get_filefsid(), wip.spanType);
-                wbl1.is_dirty = true;
+            if (wip.get_inode_level() == 1)
+            {
+                int pidx = wbl1.myidx_in_myparent();
+                wip.set_child_dbn(pidx, wbl1.m_dbn);
+            }
+            else if (wip.get_inode_level() == 2)
+            {
+                REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.LOADBUF_LATENCY_MS, offset);
+                RedBufL2 wbl2 = (RedBufL2)redfs_load_buf(wip, 2, fbn, true);
+                REDFSCoreSideMetrics.m.StopMetric(METRIC_NAME.LOADBUF_LATENCY_MS, offset);
 
-                if (wip.get_inode_level() == 1)
-                {
-                    int pidx = wbl1.myidx_in_myparent();
-                    wip.set_child_dbn(pidx, wbl1.m_dbn);
-                }
-                else if (wip.get_inode_level() == 2)
-                {
-                    RedBufL2 wbl2 = (RedBufL2)redfs_load_buf(wip, 2, fbn, true);
-                    wbl2.set_child_dbn(OPS.myidx_in_myparent(1, fbn), wbl1.m_dbn);
-                }
-            //}
+                wbl2.set_child_dbn(OPS.myidx_in_myparent(1, fbn), wbl1.m_dbn);
+            }
 
             int idx = OPS.myidx_in_myparent(0, fbn);
             long dbn0 = wbl1.get_child_dbn(idx);
@@ -1109,14 +1208,15 @@ namespace REDFS_ClusterMode
                 redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), dbn0);
             }
 
-            dbn0 = redfsBlockAllocator.allocateDBN(wip.get_filefsid(), wip.spanType);
+            dbn0 = redfsBlockAllocator.allocateDBN(wip, wip.spanType);
 
             wbl1.set_child_dbn(idx, dbn0);
 
             WritePlanElement wpe = redfsBlockAllocator.PrepareWritePlanSingle(dbn0);
             redFSPersistantStorage.ExecuteWritePlanSingle(wpe, buffer, offset);
 
-            wip.log("Fast Write " + fbn + "(buffer size,offset =" + buffer.Length + "," + offset + ")");
+
+            REDFSCoreSideMetrics.m.StopMetric(METRIC_NAME.FASTWRITE_LATENCY_MS, offset);
         }
 
         private void redfs_reassign_new_dbn(RedFS_Inode wip, Red_Buffer wb)
@@ -1129,7 +1229,7 @@ namespace REDFS_ClusterMode
             {
                 redfsBlockAllocator.decrement_refcount_ondealloc(wip.get_filefsid(), wb.get_ondisk_dbn());
             }
-            long newdbn = redfsBlockAllocator.allocateDBN(wip.get_filefsid(), wip.spanType);
+            long newdbn = redfsBlockAllocator.allocateDBN(wip, wip.spanType);
 
             DEFS.ASSERT(newdbn != wb.get_ondisk_dbn(), "We really have to alloc a new dbn");
 
@@ -1820,7 +1920,7 @@ namespace REDFS_ClusterMode
                     if (dummy == false)
                     {
                         //No need to allocate actual block for grow, we can load when required.
-                        long L0dbn = redfsBlockAllocator.allocateDBN(fsid, spanType);
+                        long L0dbn = redfsBlockAllocator.allocateDBN(wip, spanType);
 
                         int last_slot = OPS.myidx_in_myparent(0, new_L0fbn);
                         wbl1.set_child_dbn(last_slot, L0dbn);
@@ -2085,7 +2185,7 @@ namespace REDFS_ClusterMode
                 {
                     //Can be called for DEFAULT or MIRROR spantype. Otherwise we assert.
                     DEFS.ASSERT(spanType == SPAN_TYPE.DEFAULT || spanType == SPAN_TYPE.MIRRORED, "Incorrect type passed!");
-                    dbn = redfsBlockAllocator.allocateDBN(fsid, spanType);
+                    dbn = redfsBlockAllocator.allocateDBN(wip, spanType);
                 }
 
                 wb.set_dbn_reassignment_flag(false); //this is just created!.

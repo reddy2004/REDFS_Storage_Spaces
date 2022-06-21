@@ -40,6 +40,7 @@ namespace REDFS_ClusterMode
             fSecurity = new FileInfo(@"Data/fSecurity.txt").GetAccessControl();
             dSecurity = new DirectoryInfo(@"Data/dSecurity").GetAccessControl();
             DokanSideMetrics.init();
+            REDFSCoreSideMetrics.init();
             DEFS.ASSERT(REDFS.isTestMode? true: r != null, "should not be null");
             rootDirectory = r;
         }
@@ -344,9 +345,13 @@ namespace REDFS_ClusterMode
 
         NtStatus IDokanOperations.GetDiskFreeSpace(out long freeBytesAvailable, out long totalNumberOfBytes, out long totalNumberOfFreeBytes, IDokanFileInfo info)
         {
-            freeBytesAvailable = (long)16 * 1024*1024*1024;
-            totalNumberOfBytes = (long)16 * 1024 * 1024 * 1024;
-            totalNumberOfFreeBytes = (long)16 * 1024 * 1024 * 1024;
+            long totalSizeOfSegments = REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap.max_dbn * OPS.FS_BLOCK_SIZE;
+           // long totalUsage = (long)REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.allocBitMap32TBFile.USED_BLK_COUNT * OPS.FS_BLOCK_SIZE;
+            long totalUsage = (long)REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap.GetTotalAvailableFreeBlocks();
+
+            freeBytesAvailable = totalSizeOfSegments - totalUsage;
+            totalNumberOfBytes = totalSizeOfSegments;
+            totalNumberOfFreeBytes = freeBytesAvailable;
             return DokanResult.Success;
         }
 
@@ -381,7 +386,7 @@ namespace REDFS_ClusterMode
 
         NtStatus IDokanOperations.GetVolumeInformation(out string volumeLabel, out FileSystemFeatures features, out string fileSystemName, out uint maximumComponentLength, IDokanFileInfo info)
         {
-            volumeLabel = "REDFS_Incore";
+            volumeLabel = "REDFS_Volume";
             fileSystemName = "REDFS";
             maximumComponentLength = 256;
 

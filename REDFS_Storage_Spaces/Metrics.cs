@@ -18,9 +18,14 @@ namespace REDFS_ClusterMode
         DOKAN_CALLS,
         LOGICAL_DATA,
         PHYSICAL_DATA,
-        DBN_ALLOC_MS,
-        WRITE_LATENCY_MS,
-        READ_LATENCY_MS,
+        DBN_ALLOC_MS_1,
+        DBN_ALLOC_MS_2,
+        LOADBUF_LATENCY_MS,
+        FASTWRITE_LATENCY_MS,
+        BLOCKS_ALLOCATED,
+        BLOCKS_FREED,
+        USED_BLOCK_COUNT,
+        BLOCK_DRAIN,
         LAST
     }
 
@@ -37,17 +42,33 @@ namespace REDFS_ClusterMode
         long[] CurrentMetricCounters;
         long[] CurrentMetricSamples;
         public int[] AverageValues;
-        public MetricSlice()
+        public long[] CumulativeValues;
+
+        public MetricSlice(MetricSlice prevSlice)
         {
             CurrentMetricCounters = new long[enumCount];
             CurrentMetricSamples = new long[enumCount];
             AverageValues = new int[enumCount];
+            CumulativeValues = new long[enumCount];
 
 
             for (var i = 0; i < enumCount; i++)
             {
                 CurrentMetricCounters[i] = 0;
                 CurrentMetricSamples[i] = 0;
+            }
+
+            if (prevSlice != null)
+            {
+                for (var i = 0; i < enumCount; i++)
+                {
+                    if ((i == (int)METRIC_NAME.BLOCKS_ALLOCATED) || (i == (int)METRIC_NAME.BLOCKS_FREED) ||
+                            (i == (int)METRIC_NAME.READ_KILOBYTES) || (i == (int)METRIC_NAME.WRITE_KILOBYTES) ||
+                            i == (int)(METRIC_NAME.USED_BLOCK_COUNT) || i == (int)(METRIC_NAME.BLOCK_DRAIN))
+                    {
+                        CumulativeValues[i] = prevSlice.CumulativeValues[i];
+                    }
+                }
             }
         }
 
@@ -66,16 +87,23 @@ namespace REDFS_ClusterMode
                 if ((i == (int)METRIC_NAME.READ_KILOBYTES) || (i == (int)METRIC_NAME.WRITE_KILOBYTES))
                 {
                     AverageValues[i] = (int)CurrentMetricCounters[i] / (1024);
+                    CurrentMetricCounters[i] += (int)CurrentMetricCounters[i] / (1024);
                 }
-                else if (i == (int)METRIC_NAME.DOKAN_CALLS)
+                else if (i == (int)METRIC_NAME.DOKAN_CALLS || i == (int)(METRIC_NAME.BLOCKS_ALLOCATED) || i == (int)(METRIC_NAME.BLOCKS_FREED))
                 {
                     AverageValues[i] = (int)CurrentMetricCounters[i];
+                    CumulativeValues[i] += (int)CurrentMetricCounters[i];
+                }
+                else if (i == (int)(METRIC_NAME.USED_BLOCK_COUNT) || i == (int)(METRIC_NAME.BLOCK_DRAIN))
+                {
+                    AverageValues[i] = (CurrentMetricSamples[i] > 0) ? (int)(CurrentMetricCounters[i] / CurrentMetricSamples[i]) : 0;
                 }
                 else if ((i == (int)METRIC_NAME.LOGICAL_DATA) || (i == (int)METRIC_NAME.PHYSICAL_DATA))
                 {
                     AverageValues[i] = (CurrentMetricSamples[i] > 0) ? (int)((CurrentMetricCounters[i] / CurrentMetricSamples[i]) / (1024 * 1024)) : 0;
                 }
-                else if ((i == (int)METRIC_NAME.DBN_ALLOC_MS) || (i == (int)METRIC_NAME.WRITE_LATENCY_MS) || (i == (int)METRIC_NAME.READ_LATENCY_MS))
+                else if ((i == (int)METRIC_NAME.DBN_ALLOC_MS_1) || (i == (int)METRIC_NAME.DBN_ALLOC_MS_2) || 
+                        (i == (int)METRIC_NAME.LOADBUF_LATENCY_MS) || (i == (int)METRIC_NAME.FASTWRITE_LATENCY_MS))
                 {
                     AverageValues[i] = (CurrentMetricSamples[i] > 0) ? (int)((CurrentMetricCounters[i] / CurrentMetricSamples[i])) : 0;
                 }
@@ -109,7 +137,7 @@ namespace REDFS_ClusterMode
 
         public Metrics()
         {
-            currentSlice = new MetricSlice();
+            currentSlice = new MetricSlice(null);
         }
 
         public void init()
@@ -130,7 +158,11 @@ namespace REDFS_ClusterMode
             {
                 Thread.Sleep(5000);
                 StartNewMetricSlice();
-                //Console.WriteLine("[" + timeGraph.Count + "] " +  GetJSONDump());
+                if (REDFS.redfsContainer != null)
+                {
+                    REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.USED_BLOCK_COUNT, REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.allocBitMap32TBFile.USED_BLK_COUNT);
+                    REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.BLOCK_DRAIN, 0);
+                }
             }
             Console.WriteLine("Thread finished!");
         }
@@ -144,7 +176,8 @@ namespace REDFS_ClusterMode
             }
             currentSlice.CompleteSlice();
             timeGraph.Add(currentSlice);
-            currentSlice = new MetricSlice();
+
+            currentSlice = new MetricSlice(currentSlice);
         }
 
         private string UniqueId(METRIC_NAME type, int ukey)
@@ -154,20 +187,6 @@ namespace REDFS_ClusterMode
 
         public void InsertMetric(METRIC_NAME type, long amount)
         {
-            /*
-            string id = UniqueId(type, 0);
-            long currentValue = 0;
-            if (ongoing.Contains(id))
-            {
-                currentValue = (long)((MetricEntry)(ongoing[id])).end_millies;
-                ongoing.Remove(id); //or else it will fail again.
-            }
-
-            MetricEntry me = new MetricEntry();
-            me.start_millis = 0;
-            me.end_millies = amount;
-            ongoing.Add(id, me);
-            */
             currentSlice.InsertEntry(type, amount);
         }
 
@@ -232,7 +251,15 @@ namespace REDFS_ClusterMode
 
                 foreach (MetricSlice m in timeGraph)
                 {
-                    forCurrentMetric.Add(m.AverageValues[i]); 
+                    if ((i == (int)METRIC_NAME.BLOCKS_ALLOCATED) || (i == (int)METRIC_NAME.BLOCKS_FREED))
+                    {
+                        forCurrentMetric.Add((int)m.CumulativeValues[i]);
+                    }
+                    else
+                    {
+                        forCurrentMetric.Add(m.AverageValues[i]);
+                    }
+                    
                 }
                 allData.Add(forCurrentMetric);
             }

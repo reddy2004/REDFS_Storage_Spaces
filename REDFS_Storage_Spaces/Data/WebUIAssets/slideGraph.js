@@ -408,7 +408,6 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
         var volDesc = $("#m1_voldesc").val();
         var volColor = $("#m1_volcolor").val();
 
-        alert("Trying to clone root volume!");
         $scope.volume_operation("clone", 0, volName, volDesc, volColor, function() {
             window.location.href='/config';
         });
@@ -1017,7 +1016,76 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                     return options;
           }
 
-          function drawLinearGraphs(data) {
+          function GetOptionsForMetricGraphs2(title1, g1, g2, g3, g4,suffix1) {
+                    var options = {
+                        //animationEnabled: true,
+                        theme: "light",
+                        title:{
+                            text: "-"
+                        },
+                        axisX:{
+                            //valueFormatString: "S"
+                        },
+                        axisY: {
+                            title: title1,
+                            suffix: suffix1,
+                            minimum: 0
+                        },
+                        toolTip:{
+                            shared:true
+                        },  
+                        legend:{
+                            cursor:"pointer",
+                            verticalAlign: "bottom",
+                            horizontalAlign: "left",
+                            dockInsidePlotArea: true
+                            //itemclick: toogleDataSeries
+                        },
+                        data: [{
+                            type: "line",
+                            showInLegend: true,
+                            name: g1,
+                            markerType: "square",
+                            //xValueFormatString: "DD MMM, YYYY",
+                            color: "#FF0000",
+                            //yValueFormatString: "#,##0K",
+                            dataPoints: [
+                            ]
+                        },{
+                            type: "line",
+                            showInLegend: true,
+                            name: g2,
+                            markerType: "square",
+                            //xValueFormatString: "DD MMM, YYYY",
+                            color: "#00FFFF",
+                            //yValueFormatString: "#,##0K",
+                            dataPoints: [
+                            ]
+                        }, {
+                            type: "line",
+                            showInLegend: true,
+                            name: g3,
+                            markerType: "square",
+                            //xValueFormatString: "DD MMM, YYYY",
+                            color: "#0000FF",
+                            //yValueFormatString: "#,##0K",
+                            dataPoints: [
+                            ]
+                        }, {
+                            type: "line",
+                            showInLegend: true,
+                            name: g4,
+                            markerType: "square",
+                            //xValueFormatString: "DD MMM, YYYY",
+                            color: "#000000",
+                            //yValueFormatString: "#,##0K",
+                            dataPoints: [
+                            ]
+                        }]
+                    };
+                    return options;
+          }
+          function drawLinearGraphs(data, core) {
 
               var options = GetOptionsForMetricGraphs("Latency", "Read Latency (ms)", " Write latency (ms)", "(ms)");
               options.data[0].dataPoints = [];
@@ -1067,6 +1135,37 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                   options.data[1].dataPoints.push({x: i, y: data[7][i]});
               }
               $("#chartContainerSpace").CanvasJSChart(options);
+
+              options = GetOptionsForMetricGraphs2("DBN Alloc V/S Write Latency", "Alloc", "Bitmap", "Load buf", "Fast write", "(millis)");
+              options.title.text = "DBN Allocation latency";
+              options.data[0].dataPoints = [];
+              options.data[1].dataPoints = [];
+              options.data[2].dataPoints = [];
+              options.data[3].dataPoints = [];
+
+              for (var i=0;i<120;i++) {
+                  options.data[0].dataPoints.push({x: i, y: core[8][i]});
+                  options.data[1].dataPoints.push({x: i, y: core[9][i]});
+                  options.data[2].dataPoints.push({x: i, y: core[10][i]});
+                  options.data[3].dataPoints.push({x: i, y: core[11][i]});
+              }
+              $("#chartCoreDBNAlloc").CanvasJSChart(options);
+
+              options = GetOptionsForMetricGraphs2("WRLoader", "Allocs", "Deallocs", "Usage", "Queued", "(8k blocks)");
+              options.title.text = "Blocks allocs versus frees, USD_BLKS and drain CNt";
+              options.data[0].dataPoints = [];
+              options.data[1].dataPoints = [];
+              options.data[2].dataPoints = [];
+              options.data[3].dataPoints = [];
+
+              for (var i=0;i<120;i++) {
+                  options.data[0].dataPoints.push({x: i, y: core[12][i]});
+                  options.data[1].dataPoints.push({x: i, y: core[13][i]});
+                  options.data[2].dataPoints.push({x: i, y: core[14][i]});
+                  options.data[3].dataPoints.push({x: i, y: core[15][i]});
+              }
+              $("#chartAllocAndFrees").CanvasJSChart(options);
+
           }
 
           //Refresh thread, refreshes every 1 second
@@ -1077,8 +1176,8 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
                    $.get("allmetrics", function( datastr ) {
                       var data = JSON.parse(datastr);
-                      $scope.isDebugDataForGraphs = JSON.stringify(data);
-                      drawLinearGraphs(data);
+                      $scope.isDebugDataForGraphs = datastr;
+                      drawLinearGraphs(JSON.parse(data.dokan), JSON.parse(data.core));
                    });
 
               }

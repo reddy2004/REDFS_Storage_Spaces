@@ -179,6 +179,8 @@ namespace REDFS_ClusterMode
 
         public SPAN_TYPE spanType = SPAN_TYPE.DEFAULT;
 
+        public long quickSearchStartDbnCachedValue = 0;
+
         public RedFS_Inode(WIP_TYPE t, int ino, int pino)
         {
             m_ino = ino;

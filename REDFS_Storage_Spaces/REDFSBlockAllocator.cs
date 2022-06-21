@@ -39,7 +39,7 @@ namespace REDFS_ClusterMode
         public WRLoader refCountMap;
 
         //for each type of dbn
-        private long[] quickSearchStartFbn = new long[3];
+        public long[] quickSearchStartDbn = new long[3];
 
         /*
          * The block allocator maintains the list of all the chunks, segments and spans. This class is crutial to the working of redfs.
@@ -143,17 +143,47 @@ namespace REDFS_ClusterMode
             refCountMap.Sync();
         }
 
-        public long allocateDBN(int fsid, SPAN_TYPE spanType)
+        public long allocateDBN(RedFS_Inode wip, SPAN_TYPE spanType)
         {
+            int fsid = wip.get_filefsid();
+
             DEFS.ASSERT(spanType == SPAN_TYPE.DEFAULT || spanType == SPAN_TYPE.MIRRORED, "We cannot ask for a single dbn for non defautl and non mirror type protection");
-            long[] dbn = allocateDBNS(fsid, spanType, quickSearchStartFbn[(int)spanType], 1);
-            return dbn[0];
+
+            if (dbnSpanMap.max_dbn <= wip.quickSearchStartDbnCachedValue + 1)
+            {
+                wip.quickSearchStartDbnCachedValue = OPS.MIN_ALLOCATABLE_DBN;
+            }
+
+            if (dbnSpanMap.max_dbn <= quickSearchStartDbn[(int)spanType] + 1)
+            {
+                quickSearchStartDbn[(int)spanType] = OPS.MIN_ALLOCATABLE_DBN;
+            }
+
+            long[] dbn = allocateDBNS(fsid, spanType, (wip.quickSearchStartDbnCachedValue  > quickSearchStartDbn[(int)spanType])?
+                wip.quickSearchStartDbnCachedValue : quickSearchStartDbn[(int)spanType], 1);
+
+            if (dbn.Length == 0) //FAiled to allocate
+            {
+                if (wip.quickSearchStartDbnCachedValue > quickSearchStartDbn[(int)spanType])
+                {
+                    //retry from beginning
+                    long[] dbn1 = allocateDBNS(fsid, spanType, quickSearchStartDbn[(int)spanType], 1);
+                    wip.quickSearchStartDbnCachedValue = dbn1[0];
+                    return dbn1[0];
+                }
+                return -1; //failed
+            }
+            else
+            {
+                wip.quickSearchStartDbnCachedValue = dbn[0];
+                return dbn[0];
+            }
         }
 
         public long[] allocateDBNSMultipleOfFour(int fsid, SPAN_TYPE spanType, int numdbns)
         {
             DEFS.ASSERT(numdbns % 4 == 0, "Cannot call allocateDBNSMultipleOfFour which is not a multiple of 4block stripes");
-            return allocateDBNS(fsid, spanType, quickSearchStartFbn[(int)spanType], numdbns);
+            return allocateDBNS(fsid, spanType, quickSearchStartDbn[(int)spanType], numdbns);
         }
 
         /*
@@ -181,7 +211,7 @@ namespace REDFS_ClusterMode
         public long[] allocateDBNS(int fsid, SPAN_TYPE spanType, long start_dbn, int num_dbns)
         {
             //ukey is 1 as we are not multithreaded here.
-            REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.DBN_ALLOC_MS, 1);
+            //REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.DBN_ALLOC_MS_1, 1);
 
             if (start_dbn < OPS.MIN_ALLOCATABLE_DBN)
             {
@@ -208,7 +238,9 @@ namespace REDFS_ClusterMode
             long end_dbn_here = ((spanType == SPAN_TYPE.RAID5) ?
                             (start_dbn_here + 4 * OPS.NUM_DBNS_IN_1GB) : (start_dbn_here + OPS.NUM_DBNS_IN_1GB));
 
-            long[] dbns = allocBitMap32TBFile.allocate_Dbns(start_dbn_here, end_dbn_here , num_dbns);
+            //REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.DBN_ALLOC_MS_1, 1);
+            long[] dbns = allocBitMap32TBFile.allocate_Dbns(start_dbn, start_dbn_here, end_dbn_here , num_dbns);
+            //REDFSCoreSideMetrics.m.StopMetric(METRIC_NAME.DBN_ALLOC_MS_1, 1);
 
             if (dbns.Length == 0)
             {
@@ -239,8 +271,8 @@ namespace REDFS_ClusterMode
                 refCountMap.mod_refcount(fsid, -1, dbns[i], REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
             }
 
-            quickSearchStartFbn[(int)spanType] = dbns[dbns.Length - 1];
-            REDFSCoreSideMetrics.m.StartMetric(METRIC_NAME.DBN_ALLOC_MS, 1);
+            quickSearchStartDbn[(int)spanType] = dbns[dbns.Length - 1];
+            //REDFSCoreSideMetrics.m.StopMetric(METRIC_NAME.DBN_ALLOC_MS_1, 1);
             return dbns;
         }
 

@@ -11,6 +11,8 @@ namespace REDFS_ClusterMode
         public bool m_initialized = false;
         private long m_creation_time;
         private long counter = 0, cachehits, total_ops;
+        private long blocksMarkedForFreeing = 0;
+        private long blocksMarkedForFreeing2 = 0;
 
         private FileStream mfile1 = null; /* Main file which has refcounts, with each entry of 16 bytes */
         private FileStream tfile0 = null; /* temp file used to store /rather queue ops */
@@ -337,9 +339,24 @@ namespace REDFS_ClusterMode
             load_wrbufx(rbn);
             counter++;
 
+            DEFS.ASSERT(dbn != 0 && value != 0, "dbn should be valid and value also should be valid");
+
             int curr = GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(dbn);
             GLOBALQ.WRObj[rbn].incoretbuf.set_refcount(dbn, curr + value);
 
+            int curr_new = GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(dbn);
+
+            DEFS.ASSERT(curr_new == (value + curr), "should've updated correctly!");
+            DEFS.ASSERT(value != 0, "should be + or - one");
+
+            if (value == -1)
+            {
+                if (GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(dbn) == 0) blocksMarkedForFreeing2++;
+                if (0 == blocksMarkedForFreeing2 % 1024)
+                {
+                    Console.WriteLine("blocksMarkedForFreeing2 = " + blocksMarkedForFreeing2);
+                }
+            }
             if (optype == REFCNT_OP.INCREMENT_REFCOUNT)
             {
                 Console.WriteLine("debug here!");
@@ -476,21 +493,29 @@ namespace REDFS_ClusterMode
         private void checkset_if_blockfree(long dbn, int c)
         {
             int rbn = REFDEF.dbn_to_rbn(dbn);
-            if (GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(dbn) == 0)
+            int refcnt = GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(dbn);
+            if (refcnt == 0)
             {
                 DEFS.ASSERT(GLOBALQ.WRObj[rbn].incoretbuf.get_childcount(dbn) == 0,
                     "WTF happened? chdcnt = " + c + " -> " + GLOBALQ.WRObj[rbn].incoretbuf.get_childcount(dbn));
                 lock (GLOBALQ.m_deletelog2)
                 {
-                    GLOBALQ.m_deletelog2.Add(dbn);
+                    GLOBALQ.m_deletelog2.Add(dbn); //to set bit free in allocmap
                 }
+                /*
+                lock (GLOBALQ.m_deletelog3)
+                {
+                    GLOBALQ.m_deletelog3.Add(dbn); //to increment free block counter in span map
+                }
+                */
                 lock (GLOBALQ.m_deletelog_spanmap)
                 {
                     //XXX todo, if bit is free, then we must also update the spanmap so it know that the bit became free and it can
                     //then update the used block counter.
-                    GLOBALQ.m_deletelog_spanmap.Add(dbn);
+                    //GLOBALQ.m_deletelog_spanmap.Add(dbn);
                 }
-                GLOBALQ.WRObj[rbn].incoretbuf.set_childcount(dbn, 0); //must clear this.
+                
+                blocksMarkedForFreeing++;
             }
         }
 
@@ -606,8 +631,6 @@ namespace REDFS_ClusterMode
                 //Add assert if possible.
                 if (childcnt > 0)
                 {
-                    Console.WriteLine("chdl cnt!");
-
                     //DEFS.DEBUG("CNTr", "Encountered child update for " + cu.dbn + " = " +
                     //    GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(cu.dbn) + "," + childcnt);
 
@@ -638,7 +661,7 @@ namespace REDFS_ClusterMode
                     }
                     else
                     {
-                        //DEFS.ASSERT(false, "passed type = " + cu.blktype + "dbn = " + cu.dbn + " chdcnt = " + childcnt);
+                        DEFS.ASSERT(false, "passed type = " + cu.blktype + "dbn = " + cu.dbn + " chdcnt = " + childcnt);
                     }
                 }
 
@@ -737,6 +760,18 @@ namespace REDFS_ClusterMode
                     optype == REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC || 
                     optype == REFCNT_OP.BATCH_INCREMENT_REFCOUNT_ALLOC, "Wrong param in mod_refcount");
 
+            switch (optype)
+            {
+                case REFCNT_OP.INCREMENT_REFCOUNT_ALLOC:
+                    REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.BLOCKS_ALLOCATED, 1);
+                    break;
+                case REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC:
+                    REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.BLOCKS_FREED, 1);
+                    break;
+                default:
+                    break;
+            }
+
             if (optype == REFCNT_OP.TOUCH_REFCOUNT)
             {
                 DEFS.ASSERT(wb != null, "WB cannot be null in touch refcount!");
@@ -767,14 +802,17 @@ namespace REDFS_ClusterMode
             {
                 case REFCNT_OP.INCREMENT_REFCOUNT:
                 case REFCNT_OP.INCREMENT_REFCOUNT_ALLOC:
+                    DEFS.ASSERT(dbn > 0, "Cannot pass 0 dbn");
                     r.value = 1;
                     break;
                 //case REFCNT_OP.DECREMENT_REFCOUNT:
                 case REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC:
+                    DEFS.ASSERT(dbn > 0, "Cannot pass 0 dbn");
                     r.value = -1;
                     break;
                 case REFCNT_OP.TOUCH_REFCOUNT:
                     //case REFCNT_OP.DO_LOAD:
+                    DEFS.ASSERT(dbn > 0, "Cannot pass 0 dbn");
                     r.value = 0;
                     break;
             }

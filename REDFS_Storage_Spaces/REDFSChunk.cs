@@ -602,6 +602,8 @@ namespace REDFS_ClusterMode
         private Boolean mTerminateThread = false;
         private Boolean mThreadTerminated = true;
 
+        public long max_dbn; //overflows after this. so reset the search to 0 again.
+
         public DBNSegmentSpanMap(int numSpans)
         {
             startDBNToDBNSegmentSpan = new DBNSegmentSpan[numSpans];
@@ -639,6 +641,11 @@ namespace REDFS_ClusterMode
                 if (startDBNToDBNSegmentSpan[i].isSegmentValid)
                 {
                     Console.WriteLine("loaded span : (" +  i + ") " + startDBNToDBNSegmentSpan[i].GetStringRepresentation());
+
+                    long sdbn, edbn;
+                    int numblks;
+                    startDBNToDBNSegmentSpan[i].GetStartAndEndDBNForSpan(out sdbn, out edbn, out numblks);
+                    max_dbn = edbn;
                 }
             }
             
@@ -666,7 +673,8 @@ namespace REDFS_ClusterMode
                         for (int i = 0; i < count; i++)
                         {
                             long dbn = GLOBALQ.m_deletelog_spanmap.ElementAt(0);
-                            
+                            REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.BLOCK_DRAIN, count);
+
                             GLOBALQ.m_deletelog_spanmap.RemoveAt(0);
 
                             int start_at = DBNSegmentSpan.GetDBNSpaceSegmentOffset(dbn);
@@ -691,7 +699,7 @@ namespace REDFS_ClusterMode
                                 else
                                 {
                                     startDBNToDBNSegmentSpan[start_at].totalFreeBlocks += 1;
-                                    Console.WriteLine("Freeing " + dbn + " @ " + startDBNToDBNSegmentSpan[start_at].type + " FB: " + startDBNToDBNSegmentSpan[start_at].totalFreeBlocks);
+                                    //Console.WriteLine("Freeing " + dbn + " @ " + startDBNToDBNSegmentSpan[start_at].type + " FB: " + startDBNToDBNSegmentSpan[start_at].totalFreeBlocks);
                                 }
                                 isDirty = true;
                             }
@@ -727,6 +735,19 @@ namespace REDFS_ClusterMode
                 }
             }
             return true;
+        }
+
+        public long GetTotalAvailableFreeBlocks()
+        {
+            long freeBlocks = 0;
+            for (int i = 0; i < OPS.NUM_SPAN_MAX_ALLOWED; i++)
+            {
+                if (startDBNToDBNSegmentSpan[i].isSegmentValid)
+                {
+                    freeBlocks += startDBNToDBNSegmentSpan[i].totalFreeBlocks;
+                }
+            }
+            return freeBlocks;
         }
 
         public long GetAvailableBlocksWithType(SPAN_TYPE type)
@@ -977,6 +998,14 @@ namespace REDFS_ClusterMode
                             dupSpan.totalFreeBlocks = OPS.NUM_DBNS_IN_1GB;
                             dupSpan.start_dbn = span.start_dbn + i * OPS.NUM_DBNS_IN_1GB;
                             startDBNToDBNSegmentSpan[startSeg + i] = dupSpan;
+
+                            long sdbn, edbn;
+                            int numblks;
+                            dupSpan.GetStartAndEndDBNForSpan(out sdbn, out edbn, out numblks);
+                            if (max_dbn < edbn)
+                            {
+                                max_dbn = edbn;
+                            }
                     }
                     else
                     {
