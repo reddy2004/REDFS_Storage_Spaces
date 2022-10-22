@@ -305,7 +305,23 @@ namespace REDFS_ClusterMode
 
         private void checkset_if_blockfree_batch(UpdateReqI cu)
         {
-            throw new SystemException("not yet implimented!");
+            RedBufL1 wbl1 = (RedBufL1)allocate_wb(cu.blktype);
+
+            lock (tfile0)
+            {
+                tfile0.Seek((long)cu.tfbn * OPS.FS_BLOCK_SIZE, SeekOrigin.Begin);
+                tfile0.Read(tmpiodatatfileR, 0, OPS.FS_BLOCK_SIZE);
+                OPS.Decrypt_Read_WRBuf(tmpiodatatfileR, wbl1.data);
+            }
+
+            for (int idx = 0; idx < OPS.FS_SPAN_OUT; idx++)
+            {
+                long dbn = wbl1.get_child_dbn(idx);
+                if (dbn != DBN.INVALID && dbn != 0)
+                {
+                    checkset_if_blockfree(dbn, 0);
+                }
+            }
         }
 
         //Update a batch of dbns that just got allocated. We dont know their use yet, just set the dbn refcount to 1

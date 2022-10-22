@@ -12,3 +12,7 @@ The stripe hole can only filled by background scanners, wich we are offline.
 trying to write to the third block creating race conditions.
 
 Make read only snapshots work
+
+When volume has data, backed clone is failing.
+
+Create vol->writedata ->do backed clone->delete data from snapshot->reload/clone orig volume ===> crash

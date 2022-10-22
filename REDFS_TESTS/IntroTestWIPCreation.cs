@@ -238,7 +238,7 @@ namespace REDFS_TESTS
              * Use the wip to write out some data to disk. You could write out any arbitrary data encoded to byte array. 
              * For ex. Im using a simple json to store the directory info and writing out the json->byte array for the dir wip in the project
              */
-            rfcore.redfs_write(myWIP, 0, buffer_in, 0, dataSize);
+            rfcore.redfs_write(myWIP, 0, buffer_in, 0, dataSize, WRITE_TYPE.OVERWRITE_IN_PLACE);
 
             /*
              * Read directly using the REDFSCore.
@@ -375,7 +375,7 @@ namespace REDFS_TESTS
             /*
              * Use the wip to write out some data to disk. You could write out any arbitrary data encoded to byte array. 
              */
-            rfcore.redfs_write(myWIP, 0, buffer_in, 0, dataSize);
+            rfcore.redfs_write(myWIP, 0, buffer_in, 0, dataSize, WRITE_TYPE.OVERWRITE_IN_PLACE);
 
             rfcore.sync(myWIP);
             rfcore.flush_cache(myWIP, false);
@@ -398,7 +398,7 @@ namespace REDFS_TESTS
                 Assert.AreEqual(0, childrefcnt); //Should be 0 for L0
             }
 
-            rfcore.redfs_write(myWIP_clone, 0, buffer_in, 0, OPS.FS_BLOCK_SIZE);
+            rfcore.redfs_write(myWIP_clone, 0, buffer_in, 0, OPS.FS_BLOCK_SIZE, WRITE_TYPE.OVERWRITE_IN_PLACE);
             rfcore.sync(myWIP_clone);
             rfcore.flush_cache(myWIP_clone, false);
 
@@ -475,7 +475,7 @@ namespace REDFS_TESTS
             /*
              * Use the wip to write out some data to disk. You could write out any arbitrary data encoded to byte array. 
              */
-            rfcore.redfs_write(myWIP, 0, buffer_in, 0, dataSize);
+            rfcore.redfs_write(myWIP, 0, buffer_in, 0, dataSize, WRITE_TYPE.OVERWRITE_IN_PLACE);
 
             rfcore.sync(myWIP);
             rfcore.flush_cache(myWIP, false);
@@ -554,7 +554,7 @@ namespace REDFS_TESTS
              * also check ref counts of other clones
              */
             r.NextBytes(buffer_out); //scrable
-            rfcore.redfs_write(clones[9], 0, buffer_out, 0, dataSize);
+            rfcore.redfs_write(clones[9], 0, buffer_out, 0, dataSize, WRITE_TYPE.OVERWRITE_IN_PLACE);
 
             rfcore.redfs_read(clones[9], 0, buffer_raw_read, 0, buffer_raw_read.Length);
 
@@ -574,12 +574,12 @@ namespace REDFS_TESTS
                 int refcnt = 0, childrefcnt = 0;
                 rfcore.redfsBlockAllocator.GetRefcounts(dbn, ref refcnt, ref childrefcnt);
 
-                Assert.AreEqual(1, refcnt);
+                Assert.AreEqual((i==0) ? 1 : 11, refcnt);
                 Assert.AreEqual(0, childrefcnt);
 
                 rfcore.redfsBlockAllocator.GetRefcounts(dbn_prev, ref refcnt, ref childrefcnt);
 
-                Assert.AreEqual(10, refcnt);
+                Assert.AreEqual((i == 0)? 10 : 11, refcnt);
                 Assert.AreEqual(0, childrefcnt);
             }
 

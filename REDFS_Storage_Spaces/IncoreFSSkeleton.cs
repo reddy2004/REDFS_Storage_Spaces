@@ -393,6 +393,11 @@ namespace REDFS_ClusterMode
             features = FileSystemFeatures.CasePreservedNames | FileSystemFeatures.CaseSensitiveSearch |
                        FileSystemFeatures.SupportsRemoteStorage | FileSystemFeatures.UnicodeOnDisk;
 
+            if (rootDirectory.isReadOnlyVolume)
+            {
+                features |= FileSystemFeatures.ReadOnlyVolume;
+            }
+
             DokanSideMetrics.m.InsertMetric(METRIC_NAME.DOKAN_CALLS, 1);
             return DokanNet.NtStatus.Success;
         }

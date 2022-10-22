@@ -218,7 +218,7 @@ namespace REDFS_TESTS
             //thats 200 + ( 7+  6 + 1), 214 new blocks are used.
             //XXX Where did the other 4 blocks go????
             //wait for the gc thread to free up some of blocks.
-            Thread.Sleep(10000);
+            Thread.Sleep(30000);
             Assert.AreEqual(243, REDFS.redfsContainer.ifsd_mux.getUsedBlockCount());
 
             byte[] buffer = new byte[OPS.FS_BLOCK_SIZE];

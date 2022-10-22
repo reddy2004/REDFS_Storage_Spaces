@@ -43,6 +43,7 @@ namespace REDFS_ClusterMode
 
         public string volDescription { get; set; }
 
+        public bool isReadOnly { get; set; }
         public VirtualVolume()
         {
             volumeCreateTime = DateTime.Now;
@@ -185,11 +186,31 @@ namespace REDFS_ClusterMode
                 if (volume.volumeId == parentVolumeId)
                 {
                     found = true;
-                    maxVolumeId++;
                     v.parentVolumeId = parentVolumeId;
                     v.parentIsSnapshot = true;
-                    v.volumeId = maxVolumeId;
                     v.volname = newVolumeName;
+
+                    int volid = -1;
+                    if (!REDFS.isTestMode)
+                    {
+                        RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[parentVolumeId];
+                        volid = REDFS.redfsContainer.ifsd_mux.CreateNewFSIDFromExistingFSID(rfsid);
+                        DEFS.ASSERT(volid == REDFS.redfsContainer.ifsd_mux.numValidFsids - 1, "zero index volid should concur to fsid");
+                        maxVolumeId = volid;
+                    }
+                    else
+                    {
+                        maxVolumeId++;
+                    }
+
+                    
+                    v.volumeId = maxVolumeId;
+
+                    //also make the parent read-only
+                    volume.isReadOnly = true;
+
+                     v.volDescription = "Snapshot of " + parentVolumeId;
+                     v.hexcolor = volume.hexcolor;
                     break;
                 }
             }
@@ -233,9 +254,11 @@ namespace REDFS_ClusterMode
             Boolean found = false;
             foreach (var volume in volumes)
             {
+                int volid = -1;
                 if (volume.volumeId == parentVolumeId) {
                     found = true;
-                    maxVolumeId++;
+                    volume.isReadOnly = true;
+
                     v.parentVolumeId = parentVolumeId;
                     v.parentIsSnapshot = false;
                     v.volumeId = maxVolumeId;
@@ -243,8 +266,19 @@ namespace REDFS_ClusterMode
                     v.volDescription = "clone of " + parentVolumeId;
                     v.hexcolor = volume.hexcolor;
 
+                    if (!REDFS.isTestMode)
+                    {
+                        //one copy as a clone
+                        RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[parentVolumeId];
+                        volid = REDFS.redfsContainer.ifsd_mux.CreateNewFSIDFromExistingFSID(rfsid);
+                        DEFS.ASSERT(volid == REDFS.redfsContainer.ifsd_mux.numValidFsids - 1, "zero index volid should concur to fsid");
+                        v.volumeId = volid;
+                    }
+                    else
+                    {
+                        v.volumeId = maxVolumeId++;
+                    }
 
-                    maxVolumeId++;
                     vcont.volumeId = maxVolumeId;
                     vcont.parentVolumeId = parentVolumeId;
                     vcont.parentIsSnapshot = true;
@@ -252,6 +286,21 @@ namespace REDFS_ClusterMode
                     vcont.volDescription = "snapshot of " + parentVolumeId;
                     vcont.hexcolor = volume.hexcolor;
 
+                    if (!REDFS.isTestMode)
+                    {
+                        //one copy as a snapshot.
+                        RedFS_FSID rfsid = REDFS.redfsContainer.ifsd_mux.FSIDList[parentVolumeId];
+                        volid = REDFS.redfsContainer.ifsd_mux.CreateNewFSIDFromExistingFSID(rfsid);
+                        DEFS.ASSERT(volid == REDFS.redfsContainer.ifsd_mux.numValidFsids - 1, "zero index volid should concur to fsid");
+                        vcont.volumeId = volid;
+
+                        maxVolumeId = volid;
+                    }
+                    else
+                    {
+                        vcont.volumeId = maxVolumeId++;
+                    }
+                    
                     break;
                 }
             }
@@ -312,7 +361,6 @@ namespace REDFS_ClusterMode
                         v.hexcolor = volume.hexcolor;
                     }
 
-                    //maxVolumeId++;
                     break;
                 }
             }

@@ -158,7 +158,7 @@ namespace REDFS_ClusterMode
             {
                 Thread.Sleep(5000);
                 StartNewMetricSlice();
-                if (REDFS.redfsContainer != null)
+                if (REDFS.redfsContainer != null && REDFS.redfsContainer.ifsd_mux != null)
                 {
                     REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.USED_BLOCK_COUNT, REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.allocBitMap32TBFile.USED_BLK_COUNT);
                     REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.BLOCK_DRAIN, 0);

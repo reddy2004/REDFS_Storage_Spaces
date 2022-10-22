@@ -6,6 +6,12 @@ using DokanNet;
 
 namespace REDFS_ClusterMode
 {
+    public enum WRITE_TYPE
+    {
+        TRUNCATE_AND_OVERWRITE,
+        OVERWRITE_IN_PLACE
+    }
+
     public enum WIP_TYPE
     {
         UNDEFINED,

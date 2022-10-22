@@ -29,8 +29,15 @@ namespace REDFS_ClusterMode
             // Handle requests
             HttpServer hs = new HttpServer(listener);
             Task listenTask = hs.HandleIncomingConnections();
-            listenTask.GetAwaiter().GetResult();
 
+            try
+            {
+                listenTask.GetAwaiter().GetResult();
+            } 
+            catch (Exception e)
+            {
+                Console.WriteLine("Issue with null value. to be fixed");
+            }
             // Close the listener
             listener.Close();
         }

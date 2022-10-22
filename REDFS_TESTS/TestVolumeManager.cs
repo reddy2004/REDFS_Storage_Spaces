@@ -101,6 +101,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestBackedCloneOfRegularVolume()
         {
+            REDFS.isTestMode = true;
             File.Delete(docFolder + "\\REDFS\\Test\\volumes.json");
 
             VolumeManager vm = new VolumeManager(docFolder + "\\REDFS\\Test");
@@ -119,6 +120,7 @@ namespace REDFS_TESTS
         [TestMethod]
         public void TestSnapshotOfRegularVolume()
         {
+            REDFS.isTestMode = true;
             File.Delete(docFolder + "\\REDFS\\Test\\volumes.json");
 
             VolumeManager vm = new VolumeManager(docFolder + "\\REDFS\\Test");

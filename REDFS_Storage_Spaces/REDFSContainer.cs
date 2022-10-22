@@ -332,6 +332,11 @@ namespace REDFS_ClusterMode
             return list;
         }
 
+        public DBNSegmentSpanMap getSegmentSpanMap()
+        {
+            return ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap;
+        }
+
         public VolumeManager GetCurrentVolumeManager()
         {
             return volumeManager;

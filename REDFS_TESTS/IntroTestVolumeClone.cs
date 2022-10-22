@@ -443,5 +443,53 @@ namespace REDFS_TESTS
 
             CleanupTestContainer(containerName);
         }
+
+        /*
+         * Create vol->writedata ->do backed clone->delete data from snapshot->clone orig volume ===> crash
+         * Create a volume vol1 with id 1 and write data
+         * Do backed clone. The clone gets id = 2 and snapshot id = 3
+         * Delete some data in snapshot i.e id volid=3
+         * try cloning vol1
+         */ 
+        [TestMethod]
+        public void IntroTest_9()
+        {
+            string containerName;
+            InitNewTestContainer(out containerName);
+
+            CreateTestContainer(containerName);
+
+            CreateCloneOfZeroVolume();
+
+            REDFS.isTestMode = false;
+
+            for (int fileid = 0; fileid <= 10; fileid++)
+            {
+
+                byte[] buffer = new byte[OPS.FSID_BLOCK_SIZE];
+                int bytesWritten = 0;
+                Random r = new Random();
+                r.NextBytes(buffer);
+                REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].CreateFile("\\tempfile.dat." + fileid);
+                REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[1].WriteFile("\\tempfile.dat." + fileid, buffer, out bytesWritten, 0);
+            }
+
+            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.numValidFsids == 2);
+            //Now lets create a backed clone of volid 1
+            REDFS.redfsContainer.volumeManager.CloneVolume(1, "backedSecondVol");
+
+            Assert.IsTrue(REDFS.redfsContainer.ifsd_mux.numValidFsids == 4);
+            //Delete few files
+            for (int fileid = 1; fileid < 5; fileid++)
+            {
+                REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[3].DeleteFile("\\tempfile.dat." + fileid);
+            }
+
+            //clone the volume with id 1
+            REDFS.redfsContainer.volumeManager.CloneVolumeRaw(1, "cloneagain", "Testing", "#0000FF");
+            REDFS.redfsContainer.ReloadAllFSIDs();
+
+            CleanupTestContainer(containerName);
+        }
     }
 }

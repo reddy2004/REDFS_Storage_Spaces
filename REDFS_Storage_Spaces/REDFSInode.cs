@@ -267,14 +267,28 @@ namespace REDFS_ClusterMode
 
         public Boolean WriteFile(REDFSCore redfsCore, byte[] buffer, out int bytesWritten, long offset)
         {
-            bytesWritten = redfsCore.redfs_write(myWIP, offset, buffer, 0, buffer.Length);
+            bytesWritten = redfsCore.redfs_write(myWIP, offset, buffer, 0, buffer.Length, WRITE_TYPE.OVERWRITE_IN_PLACE);
             isDirty = true;
             touch_inode_obj();
+
+            long current_wip_size = myWIP.get_filesize();
+            long end_of_file = buffer.Length + offset;
+            if (end_of_file > current_wip_size)
+            {
+                DEFS.ASSERT(end_of_file == myWIP.get_filesize(), "File size should've been written out correctly");
+            }
             return true;
         }
 
         public Boolean ReadFile(REDFSCore redfsCore, byte[] buffer, out int bytesRead, long offset)
         {
+            if (offset > myWIP.size)
+            {
+                //log error
+                bytesRead = 0;
+                return false;
+            }
+            DEFS.ASSERT(offset <= myWIP.size, "Trying to read beyond eof!");
             bytesRead = redfsCore.redfs_read(myWIP, offset, buffer, 0, buffer.Length);
             touch_inode_obj();
             return true;
@@ -535,7 +549,7 @@ namespace REDFS_ClusterMode
                         Console.WriteLine("Just to stop here for debug!");
                     }
 
-                    redfsCore.redfs_write(myWIP, 0, data, 0, data.Length);
+                    redfsCore.redfs_write(myWIP, 0, data, 0, data.Length, WRITE_TYPE.TRUNCATE_AND_OVERWRITE);
                     redfsCore.redfs_checkin_wip(inowip, myWIP, myWIP.get_ino());
                     redfsCore.sync(myWIP);
                     myWIP.log("syncInteral datalen=" + data.Length);
@@ -573,7 +587,7 @@ namespace REDFS_ClusterMode
 
                 
 
-                redfsCore.redfs_write(myWIP, 0, data, 0, data.Length);
+                redfsCore.redfs_write(myWIP, 0, data, 0, data.Length, WRITE_TYPE.TRUNCATE_AND_OVERWRITE);
                 redfsCore.redfs_checkin_wip(inowip, myWIP, myWIP.get_ino());
                 redfsCore.sync(myWIP);
                 redfsCore.flush_cache(myWIP, false);

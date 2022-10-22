@@ -70,6 +70,12 @@ namespace REDFS_ClusterMode
                     int deallocs = delete_wip_internal2(wip);
                     Thread.Sleep(100); //wait to drain
                     Console.WriteLine("Num deallocs = " + deallocs);
+                    
+                    for (int i = 0; i < OPS.NUM_PTRS_IN_WIP; i++) { wip.set_child_dbn(i, DBN.INVALID); }
+                    wip.is_dirty = false;
+                    wip.set_filesize(0);
+                    wip.set_ino(0, -1);
+
                     /*
                     //PrintableWIP pwip = redfs_list_tree(wip, new long[] { }, new int[] { });
 
@@ -448,7 +454,7 @@ namespace REDFS_ClusterMode
                 if (free_bit != -1)
                 {
                     int free_inode = (int)(cfbn * (OPS.FS_BLOCK_SIZE * 8) + free_bit);
-                    redfs_write(iMapWip, (cfbn * OPS.FS_BLOCK_SIZE), buffer, 0, OPS.FS_BLOCK_SIZE);
+                    redfs_write(iMapWip, (cfbn * OPS.FS_BLOCK_SIZE), buffer, 0, OPS.FS_BLOCK_SIZE, WRITE_TYPE.OVERWRITE_IN_PLACE);
 
                     sync(iMapWip);
                     fsid.set_inodemap_wip(iMapWip);
@@ -499,7 +505,7 @@ namespace REDFS_ClusterMode
             long fileoffset = m_ino * OPS.WIP_SIZE;
             lock (inowip)
             {
-                redfs_write(inowip, fileoffset, mywip.data, 0, OPS.WIP_SIZE);
+                redfs_write(inowip, fileoffset, mywip.data, 0, OPS.WIP_SIZE, WRITE_TYPE.OVERWRITE_IN_PLACE);
                 mywip.is_dirty = false;
                 inowip.is_dirty = true;
             }
@@ -858,6 +864,7 @@ namespace REDFS_ClusterMode
             //Try to write out L1 & L2s instead
             sync(wip);
             flush_cache(wip, true);
+            DEFS.ASSERT(wip.get_filesize() == newsize, "File size should match after resize");
         }
 
         //
@@ -965,10 +972,12 @@ namespace REDFS_ClusterMode
             wip4delq.setfilefsid_on_dirty(fsid); //this must be set or else the counters go wrong.
             
             GLOBALQ.m_wipdelete_queue.Add(wip4delq);
-
+            /*
             for (int i = 0; i < OPS.NUM_PTRS_IN_WIP; i++) { wip.set_child_dbn(i, DBN.INVALID); }
             wip.is_dirty = false;
             wip.set_filesize(0);
+            wip.set_ino(0, -1);
+            */
         }
 
         public int redfs_get_file_dbns(RedFS_Inode wip, long[] dbns, int startfbn, int count)
@@ -1428,9 +1437,22 @@ namespace REDFS_ClusterMode
         }
 
 
-        public int redfs_write(RedFS_Inode wip, long fileoffset, byte[] buffer, int boffset, int blength)
+        public int redfs_write(RedFS_Inode wip, long fileoffset, byte[] buffer, int boffset, int blength, WRITE_TYPE type)
         {
-            return do_io_internal(REDFS_OP.REDFS_WRITE, wip, fileoffset, buffer, boffset, blength);
+            if (type == WRITE_TYPE.OVERWRITE_IN_PLACE)
+            {
+                return do_io_internal(REDFS_OP.REDFS_WRITE, wip, fileoffset, buffer, boffset, blength);
+            }
+            else if (type == WRITE_TYPE.TRUNCATE_AND_OVERWRITE)
+            {
+                redfs_shrink_wip_internal(wip.get_filefsid(), wip, 0);
+                return do_io_internal(REDFS_OP.REDFS_WRITE, wip, fileoffset, buffer, boffset, blength);
+            }
+            else
+            {
+                DEFS.ASSERT(false, "Unknown type passed, cannot handle it.");
+                return -1;
+            }
         }
 
         public int redfs_read(RedFS_Inode wip, long fileoffset, byte[] buffer, int boffset, int blength)

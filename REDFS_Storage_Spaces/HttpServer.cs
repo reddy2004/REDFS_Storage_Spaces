@@ -291,6 +291,17 @@ namespace REDFS_ClusterMode
                     }
                     resp.Close();
                 }
+                else if ((req.HttpMethod == "GET") && req.Url.AbsolutePath.IndexOf("/getAllSegmentsInContainer") == 0)
+                {
+                    if (isUserValid)
+                    {
+                        DBNSegmentSpanMap segmentMap = REDFS.redfsContainer.getSegmentSpanMap();
+                        String jsonData =  JsonConvert.SerializeObject(segmentMap, Formatting.None);
+                        byte[] data = Encoding.UTF8.GetBytes(jsonData);
+                        await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                    }
+                    resp.Close();
+                }
                 else if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/optimizeStorageOperations"))
                 {
                     if (isUserValid)
@@ -521,47 +532,54 @@ namespace REDFS_ClusterMode
                         }
                         else
                         {
-                            switch (b2.operation)
+                            try
                             {
-                                case "delete":
-                                    volumeManager.DeleteVolume(b2.volumeId);
-                                    REDFS.redfsContainer.ReloadAllFSIDs();
-                                    break;
-                                case "backedclone":
-                                    volumeManager.CloneVolume(b2.volumeId, b2.volname);
-                                    REDFS.redfsContainer.ReloadAllFSIDs();
-                                    break;
-                                case "clone":
-                                    volumeManager.CloneVolumeRaw(b2.volumeId, b2.volname, b2.volDesc, b2.hexcolor);
-                                    REDFS.redfsContainer.ReloadAllFSIDs();
-                                    break;
-                                case "snapshot":
-                                    volumeManager.VolumeSnapshot(b2.volumeId, b2.volname);
-                                    REDFS.redfsContainer.ReloadAllFSIDs();
-                                    break;
-                                case "save":
-                                    volumeManager.UpdateVolume(b2.volumeId, b2.volname, b2.volDesc, b2.hexcolor);
-                                    break;
-                                case "mount":
-                                    REDFS.redfsContainer.containerOperations.currentlyMountedVolume = b2.volumeId;
-                                    REDFS.redfsContainer.MountVolume((int)b2.volumeId);
-                                    //volumeManager.MountVolume(b2.volumeId);
-                                    break;
-                                case "unmount":
-                                    if (REDFS.redfsContainer.containerOperations.currentlyMountedVolume == b2.volumeId)
-                                    {
-                                        while (REDFS.redfsContainer.containerOperations.StopAllRunningOperations() == false)
+                                    switch (b2.operation)
+                                {
+                                    case "delete":
+                                        volumeManager.DeleteVolume(b2.volumeId);
+                                        REDFS.redfsContainer.ReloadAllFSIDs();
+                                        break;
+                                    case "backedclone":
+                                        REDFS.redfsContainer.ifsd_mux.Sync();
+                                        volumeManager.CloneVolume(b2.volumeId, b2.volname);
+                                        REDFS.redfsContainer.ReloadAllFSIDs();
+                                        break;
+                                    case "clone":
+                                        volumeManager.CloneVolumeRaw(b2.volumeId, b2.volname, b2.volDesc, b2.hexcolor);
+                                        REDFS.redfsContainer.ReloadAllFSIDs();
+                                        break;
+                                    case "snapshot":
+                                        volumeManager.VolumeSnapshot(b2.volumeId, b2.volname);
+                                        REDFS.redfsContainer.ReloadAllFSIDs();
+                                        break;
+                                    case "save":
+                                        volumeManager.UpdateVolume(b2.volumeId, b2.volname, b2.volDesc, b2.hexcolor);
+                                        break;
+                                    case "mount":
+                                        REDFS.redfsContainer.containerOperations.currentlyMountedVolume = b2.volumeId;
+                                        REDFS.redfsContainer.MountVolume((int)b2.volumeId);
+                                        //volumeManager.MountVolume(b2.volumeId);
+                                        break;
+                                    case "unmount":
+                                        if (REDFS.redfsContainer.containerOperations.currentlyMountedVolume == b2.volumeId)
                                         {
-                                            Thread.Sleep(500);
+                                            while (REDFS.redfsContainer.containerOperations.StopAllRunningOperations() == false)
+                                            {
+                                                Thread.Sleep(500);
+                                            }
+                                            REDFS.redfsContainer.containerOperations.currentlyMountedVolume = 0;
+                                            REDFS.redfsContainer.UnMountVolume();
                                         }
-                                        REDFS.redfsContainer.containerOperations.currentlyMountedVolume = 0;
-                                        REDFS.redfsContainer.UnMountVolume();
-                                    }
-                                    break;
-                                default:
-                                    break;
+                                        break;
+                                    default:
+                                        break;
+                                }
+                            } 
+                            catch (Exception e)
+                            {
+                                Console.WriteLine(e.Message);
                             }
-
                             string json = JsonConvert.SerializeObject(new GenericSuccessReply(), Formatting.Indented);
                             byte[] data = Encoding.UTF8.GetBytes(json);
                             await resp.OutputStream.WriteAsync(data, 0, data.Length);

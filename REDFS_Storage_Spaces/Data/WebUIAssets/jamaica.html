@@ -182,7 +182,7 @@
                             <label for="allowedTypes">Protection Level</label>
                             <select class="custom-select" id="allowedTypes">
                               <option selected>What kind of segments may be created?</option>
-                              <option value="1">Default only. No RAID5 or Mirror segments.</option>
+                              <option value="1">Default only.(No RAID5 or Mirror segments).</option>
                               <option value="7">ANY, i.e default, Mirror or RAID5</option>
                               <option value="4">RAID5 segments only</option>
                               <option value="2">Mirrored Segments only</option>
@@ -198,6 +198,81 @@
               </div>
             </div>
             
+
+            <!-- Modal in progress -->
+            <div class="modal fade" id="newSegmentModal" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_7S" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_7">Add a new segment into DBN Space</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        <div>
+                            <label for="speedclass"><b>Type of segment</b></label>
+                            <select class="custom-select" id="segmenttype" ng-model="dropValue" ng-change="DropDownChnaged()">
+                              <option value="ss">Select from drop down</option>
+                              <option value="segmentDefault">Default</option>
+                              <option value="segmentMirrored">Mirrored</option>
+                              <option value="segmentRaid5">RAID 5</option>
+                            </select>
+                        </div>
+                        <br>
+                        <div>
+                            <label for="sizeingb11"><b>Size in GB (In RedFS address space)</b></label>
+                            <div style="width:100%;">
+                                <input type="number" class="form-control" id="sizeingb11" style="width:10%;" placeholder="" min="1" disabled>
+                                <label for="sizeingbTotal">[ Real Space utilization in host filesystem: 4GB ]</label>
+                            </div>
+                        </div>
+                        <br>
+                        <label for="sizeingb121a" ng-show="showchunkoption1forsegmentLabel"> <b>Select the chunks where this segment will be written out </b></label>
+                        <label for="sizeingb121b" ng-show="showchunkoption1forsegmentLabel">{{segmentHelpHint}}</label>
+                        <div ng-show="showchunkoption1forsegment">
+                            <div>
+                                <select class="custom-select" id="segmenttype1">
+                                    <option ng-repeat="chunkpath in listOfChunks" ng-value="chunkpath">{{chunkpath}}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div ng-show="showchunkoption2forsegment">
+                            <div>
+                                <select class="custom-select" id="segmenttype2">
+                                     <option ng-repeat="chunkpath in listOfChunks" ng-value="chunkpath">{{chunkpath}}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div ng-show="showchunkoption3forsegment">
+                            <div>
+                                <select class="custom-select" id="segmenttype3">
+                                     <option ng-repeat="chunkpath in listOfChunks" ng-value="chunkpath">{{chunkpath}}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div ng-show="showchunkoption4forsegment">
+                            <div>
+                                <select class="custom-select" id="segmenttype4">
+                                     <option ng-repeat="chunkpath in listOfChunks" ng-value="chunkpath">{{chunkpath}}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div ng-show="showchunkoption5forsegment">
+                            <div>
+                                <select class="custom-select" id="segmenttype5">
+                                     <option ng-repeat="chunkpath in listOfChunks" ng-value="chunkpath">{{chunkpath}}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-info" ng-click="addNewSegmentForCurrentContainer()" >ADD</button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <!-- Modal in progress -->
             <div class="modal fade" id="singleChunkOperation" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_6" aria-hidden="true">
@@ -746,8 +821,6 @@
                             <div id="chartContainerRefs" style="height: 300px; width: 80%; margin:  auto;"></div> <br>
                             <div id="chartContainerDirty" style="height: 300px; width: 80%; margin:  auto;"></div> <br>
                             <div id="chartContainerSpace" style="height: 300px; width: 80%; margin: auto;"></div> <br>
-                            <div id="chartAllocAndFrees" style="height: 300px; width: 80%; margin: auto;"></div> <br>
-                            <div id="chartCoreDBNAlloc" style="height: 300px; width: 80%; margin: auto;"></div> <br>
 
                         </div>
                     </div>
@@ -759,7 +832,7 @@
                                 <br> <br>
                             </div>
                             <table>
-                                <thead>
+                                <thead  style="color: darkgray;">
                                     <tr>
                                         <td style="width: 5%;"> <b> No. </b> </td>
                                         <td style="width: 40%;"> <b> Task Name </b> </td>
@@ -810,7 +883,7 @@
                                 <br> <br>
                             </div>
                             <table>
-                                <thead>
+                                <thead  style="color: darkgray;">
                                     <tr>
                                         <td style="width: 5%;"> <b> No. </b> </td>
                                         <td style="width: 45%;"> <b> Path </b> </td>
@@ -851,12 +924,59 @@
                             </table>
                         </div>
 
-
-                        <br><br><br>
+                        <br><br><br><br><br><br><br><br>
                         <div class="col-12 bg-light">
-                            <b> Encryption, Mirroring, Compression & Dedupe options </b>
+                            <b> Segments </b> <a href="#" ng-click="toggleDebug()"> (debug) </a>
+                            <div ng-show="showdebuginfo" style="color:red;">
+                                 <!-- {{isDebugDataForSegments}} -->
+                                <br> <br>
+                                {{listOfKnownValidSegmentsInContainer}}
+                            </div>
                             <table>
-                                <thead>
+                                <thead style="color: darkgray;">
+                                    <tr>
+                                        <td style="width: 5%;"> <b> No. </b> </td>
+                                        <td style="width: 15%;"> <b> StartDBN </b> </td>
+                                        <td style="width: 10%;"> <b> Size (GB) </b></td>
+                                        <td style="width: 10%;"> <b> TYPE </b> </td>
+                                        <td style="width: 25%;"> <b> Free Space (Blocks) </b> </td>
+                                        <td style="width: 35%;"> <b> Graph </b> </td>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr ng-repeat="segment in listOfKnownValidSegmentsInContainer">
+                                        <td> {{segment.id}} </td>
+                                        <td> {{segment.start_dbn}} </td>
+                                        <td> {{segment.num_segments}} </td>
+                                        <td> {{segment.type}} </td>
+                                        <td> {{segment.totalFreeBlocks}} </td>
+                                        <td>  <a href="#" ng-click="visualizeSegment(segment.id)"> visuals  </a> </td>
+                                    </tr>
+                                    <tr>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                        <td> - </td>
+                                    </tr>
+                                    <tr>
+                                        <td> </td>
+                                        <td> </td>
+                                        <td> Total </td>
+                                        <td> </td>
+                                        <td> {{totalSegmentSpace}} MB </td>
+                                        <td> <button type="submit" ng-click="AddNewSegment()">Add New Segment</button> </td>
+                                    </tr>
+                                <tbody>
+                            </table>
+                        </div>
+
+                        <br><br><br><br><br><br><br> <br><br><br>
+                        <div class="col-12 bg-light">
+                            <b> Encryption, Compression & Dedupe options </b>
+                            <table>
+                                <thead  style="color: darkgray;">
                                     <tr>
                                         <td style="width: 15%;"> <b> Operation </b> </td>
                                         <td style="width: 70%; text-align: center;"> <b> Description </b> </td>
@@ -877,6 +997,7 @@
                                 <tbody>
                             </table>
                         </div>
+                        <br><br><br> <br><br><br>
                     </div>
                 </div>
             </div>

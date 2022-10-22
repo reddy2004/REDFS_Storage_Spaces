@@ -105,8 +105,9 @@ namespace REDFS_ClusterMode
                         {
                             Console.WriteLine(e.Message);
                         }
+                        FSIDList[i].set_dirty(false);
                     }
-                    FSIDList[i].set_dirty(false);
+                    
                 }
             }
             redfsCore.redfsBlockAllocator.Sync();
@@ -277,6 +278,8 @@ namespace REDFS_ClusterMode
                             try
                             {
                                 RedfsVolumeTrees[v.volumeId] = new REDFSTree(FSIDList[v.volumeId], redfsCore);
+                                RedfsVolumeTrees[v.volumeId].isReadOnlyVolume = v.isReadOnly;
+
                                 if (v.volumeId != 0)
                                 {
                                     RedfsVolumeTrees[v.volumeId].LoadRootDirectory();
@@ -290,8 +293,14 @@ namespace REDFS_ClusterMode
                         }
                         catch (Exception e)
                         {
+                            RedFS_Inode srcRootDirWip =  RedfsVolumeTrees[1].GetInode("\\").myWIP;
+                            RedFS_Inode destRootDirWip = RedfsVolumeTrees[2].GetInode("\\").myWIP;
+
+                            PrintableWIP pwip_ifile_t1 = redfsCore.redfs_list_tree(srcRootDirWip, Array.Empty<long>(), Array.Empty<int>());
+                            PrintableWIP pwip_ifile_t2 = redfsCore.redfs_list_tree(destRootDirWip, Array.Empty<long>(), Array.Empty<int>());
+
                             Console.WriteLine(e.Message);
-                            throw new SystemException("Error in inowip size/contents duing reload!" + e.Message);
+                            throw new SystemException("Error in inowip size/contents duing reload!" + e.Message + " affected " + v.volumeId);
                         }
                     }
                     else

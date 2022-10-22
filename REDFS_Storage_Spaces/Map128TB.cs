@@ -143,7 +143,7 @@ namespace REDFS_ClusterMode
                 lock (GLOBALQ.m_deletelog2)
                 {
                     int count = GLOBALQ.m_deletelog2.Count;
-                    if (count > 100) count = 100;
+                    if (count > 1000) count = 1000;
 
                     try
                     {
@@ -309,7 +309,7 @@ namespace REDFS_ClusterMode
 
                     for (long dbn = sdbn; dbn < ((idx + 1) * MapBuffer.NUM_BITS_IN_MBUF); dbn++)
                     {
-                        if (stripe && (dbn % 4) == 0 && counter < num_dbns)
+                        if (stripe && (dbn % 4) == 0 && counter < num_dbns && (num_dbns - counter >= 4))
                         {
                             bool firstBit = alloc_bit_internal(dbn);
                             bool secondBit = alloc_bit_internal(dbn + 1);

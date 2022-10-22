@@ -48,6 +48,7 @@ namespace REDFS_TESTS
             string containerName;
             InitNewTestContainer(out containerName);
 
+           
             //This is what is the chunk layout.
             //a. 1GB-2GB we have default spans
             //b. 2GB-4GB we have 2 spans of mirrored segments
@@ -107,11 +108,20 @@ namespace REDFS_TESTS
             int dbnsToAllocate = 100;
             long[] dbnsDefault = rba1.allocateDBNS(0, SPAN_TYPE.DEFAULT, r.Next(OPS.NUM_DBNS_IN_1GB, 2 * OPS.NUM_DBNS_IN_1GB - 2 * dbnsToAllocate - 1), dbnsToAllocate * 2);
             long[] dbnsMirror = rba1.allocateDBNS(0, SPAN_TYPE.MIRRORED, r.Next(2 * OPS.NUM_DBNS_IN_1GB, 4 * OPS.NUM_DBNS_IN_1GB - 2 * dbnsToAllocate - 1), dbnsToAllocate * 2);
-            long[] dbnsRaid5 = rba1.allocateDBNS(0, SPAN_TYPE.RAID5, r.Next(4 * OPS.NUM_DBNS_IN_1GB, 8 * OPS.NUM_DBNS_IN_1GB - 4 * dbnsToAllocate * 2), dbnsToAllocate * 4);
+
+            //align somewhere to 4 bytes
+            //i.e start at 4th segment, random offset somewhere inside but - 400blks so we dont straddle the 8th segement
+            int straddle = r.Next(100000) * 4;
+            long start_position_raid5 = 4 * OPS.NUM_DBNS_IN_1GB + straddle - (4 * dbnsToAllocate * 2);
+
+            long[] dbnsRaid5 = rba1.allocateDBNS(0, SPAN_TYPE.RAID5, start_position_raid5, dbnsToAllocate * 4);
 
             Assert.AreEqual(dbnsDefault.Length, 200);
             Assert.AreEqual(dbnsMirror.Length, 200);
             Assert.AreEqual(dbnsRaid5.Length, 400);
+
+            Assert.IsTrue(dbnsRaid5[0] % 4 == 0);
+            Assert.IsTrue(dbnsRaid5[dbnsRaid5.Length - 1] % 4 == 3);
 
             for (int d = 0; d < dbnsDefault.Length; d++)
             {
@@ -174,7 +184,7 @@ namespace REDFS_TESTS
                 }
             }
 
-            Thread.Sleep(20000);
+            Thread.Sleep(60000);
             Assert.AreEqual(2 * OPS.NUM_DBNS_IN_1GB, rba_t.GetAvailableBlocksWithType(SPAN_TYPE.DEFAULT));
             Assert.AreEqual(2 * OPS.NUM_DBNS_IN_1GB, rba_t.GetAvailableBlocksWithType(SPAN_TYPE.MIRRORED));
             Assert.AreEqual(4 * OPS.NUM_DBNS_IN_1GB, rba_t.GetAvailableBlocksWithType(SPAN_TYPE.RAID5));

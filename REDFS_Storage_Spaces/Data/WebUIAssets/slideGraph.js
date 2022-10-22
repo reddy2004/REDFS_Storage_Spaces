@@ -34,6 +34,8 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
     $scope.totalSizeInGB = "-";
     $scope.totalFreeChunkSpace = "-";
 
+    $scope.listOfKnownValidSegmentsInContainer = [];
+
     $scope.itemsInFolderForBackupTaskBrowser = {};
     $scope.itemsInFolderForBackupTaskBrowser.files = [];
     $scope.itemsInFolderForBackupTaskBrowser.directories = [];
@@ -220,6 +222,80 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
         $("#newChunkModal").modal();
     }
 
+    $scope.AddNewSegment = function()
+    {
+        $("#newSegmentModal").modal();
+    }
+
+    $scope.visualizeSegment = function(id) {
+        alert(id);
+    }
+
+    $scope.DropDownChnaged = function()
+    {
+        var num_chunks = $scope.listOfKnownChunksInContainer.length;
+        var all_chunk_paths = [];
+
+        for (var i=0;i<num_chunks;i++) {
+            all_chunk_paths.push($scope.listOfKnownChunksInContainer[i].path);
+        }
+        var speedclass = $("#segmenttype").val();
+
+        //alert(speedclass);
+        if (speedclass == "segmentDefault") {
+            $scope.showchunkoption1forsegment = true;
+            $scope.showchunkoption2forsegment = false;
+            $scope.showchunkoption3forsegment = false;
+            $scope.showchunkoption4forsegment = false;
+            $scope.showchunkoption5forsegment = false;
+            $scope.segmentHelpHint = "['Default' segment is a single copy and is located in only one chunk]";
+            $scope.showchunkoption1forsegmentLabel = true;
+
+            $scope.listOfChunks = all_chunk_paths;
+        } else if (speedclass == "segmentMirrored") {
+
+            if (num_chunks < 2) {
+                alert("You need atleast two chunks to created a mirrored segment in RedFS address space");
+                $("#segmenttype").val("segmentDefault");
+                $scope.DropDownChnaged();
+                return;
+            }
+            $scope.showchunkoption1forsegment = true;
+            $scope.showchunkoption2forsegment = true;
+            $scope.showchunkoption3forsegment = false;
+            $scope.showchunkoption4forsegment = false;
+            $scope.showchunkoption5forsegment = false;
+            $scope.showchunkoption1forsegmentLabel = true;
+            $scope.segmentHelpHint = "['Mirrored' segment is 2x mirrored and hence needs two chunks]";
+
+            $scope.listOfChunks = all_chunk_paths;
+        } else if (speedclass == "segmentRaid5") {
+            if (num_chunks < 5) {
+                alert("You need atleast five chunks to created a 4D1P segment in RedFS address space");
+                $("#segmenttype").val("segmentDefault");
+                $scope.DropDownChnaged();
+                return;
+            }
+            $scope.showchunkoption1forsegment = true;
+            $scope.showchunkoption2forsegment = true;
+            $scope.showchunkoption3forsegment = true;
+            $scope.showchunkoption4forsegment = true;
+            $scope.showchunkoption5forsegment = true;
+            $scope.showchunkoption1forsegmentLabel = true;
+            $scope.segmentHelpHint = "['RAID5' segment is a 4D+1P fixed. Hence requires data to be striped across 5 chunks]";
+
+            $scope.listOfChunks = all_chunk_paths;
+        } else {
+            $scope.showchunkoption1forsegment = false;
+            $scope.showchunkoption2forsegment = false;
+            $scope.showchunkoption3forsegment = false;
+            $scope.showchunkoption4forsegment = false;
+            $scope.showchunkoption5forsegment = false;
+            $scope.showchunkoption1forsegmentLabel = false;
+            $scope.segmentHelpHint = "";
+        }
+    }
+
     $scope.saveVolumeInformation = function() {
         var volName = $("#m2_volname").val();
         var volDesc = $("#m2_voldesc").val();
@@ -402,7 +478,6 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
           });
     }
 
-
     $scope.CreateNewZeroVolume = function() {
         var volName = $("#m1_volname").val();
         var volDesc = $("#m1_voldesc").val();
@@ -434,6 +509,11 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
           }]
         };
         $("#konvaPie").CanvasJSChart(options);
+    }
+
+    $scope.addNewSegmentForCurrentContainer = function()
+    {
+        alert("not yet implimented!");
     }
 
     $scope.addNewChunkForCurrentContainer = function()
@@ -578,6 +658,36 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                     }
                 });
                 
+                console.log(data); 
+          });
+
+          //Call once during page load, not autoupdated
+          $.get("getAllSegmentsInContainer", function( data ) {
+                //serverJsonData = data;
+                $scope = angular.element('[ng-controller=myCtrl]').scope();
+                $scope.$apply(function () {
+                    $scope.isDebugDataForSegments = data;
+                    
+                    $scope.listOfKnownSegmentsInContainer = JSON.parse(data).startDBNToDBNSegmentSpan;
+                    
+                    $scope.totalSegmentSpace = 222;
+                });
+                
+                //now create an array to copy necessary information to display
+                for (var i=0;i<$scope.listOfKnownSegmentsInContainer.length;i++) {
+                    if ($scope.listOfKnownSegmentsInContainer[i].isSegmentValid) {
+
+                        $scope.listOfKnownValidSegmentsInContainer.push({
+                            'id': i,
+                            'start_dbn' : $scope.listOfKnownSegmentsInContainer[i].start_dbn,
+                            'num_segments' : $scope.listOfKnownSegmentsInContainer[i].num_segments,
+                            'totalFreeBlocks' : $scope.listOfKnownSegmentsInContainer[i].totalFreeBlocks,
+                            'type' : $scope.listOfKnownSegmentsInContainer[i].type,
+                            'isBeingPreparedForRemoval' : false
+
+                        });
+                    }
+                }
                 console.log(data); 
           });
 
@@ -1016,76 +1126,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                     return options;
           }
 
-          function GetOptionsForMetricGraphs2(title1, g1, g2, g3, g4,suffix1) {
-                    var options = {
-                        //animationEnabled: true,
-                        theme: "light",
-                        title:{
-                            text: "-"
-                        },
-                        axisX:{
-                            //valueFormatString: "S"
-                        },
-                        axisY: {
-                            title: title1,
-                            suffix: suffix1,
-                            minimum: 0
-                        },
-                        toolTip:{
-                            shared:true
-                        },  
-                        legend:{
-                            cursor:"pointer",
-                            verticalAlign: "bottom",
-                            horizontalAlign: "left",
-                            dockInsidePlotArea: true
-                            //itemclick: toogleDataSeries
-                        },
-                        data: [{
-                            type: "line",
-                            showInLegend: true,
-                            name: g1,
-                            markerType: "square",
-                            //xValueFormatString: "DD MMM, YYYY",
-                            color: "#FF0000",
-                            //yValueFormatString: "#,##0K",
-                            dataPoints: [
-                            ]
-                        },{
-                            type: "line",
-                            showInLegend: true,
-                            name: g2,
-                            markerType: "square",
-                            //xValueFormatString: "DD MMM, YYYY",
-                            color: "#00FFFF",
-                            //yValueFormatString: "#,##0K",
-                            dataPoints: [
-                            ]
-                        }, {
-                            type: "line",
-                            showInLegend: true,
-                            name: g3,
-                            markerType: "square",
-                            //xValueFormatString: "DD MMM, YYYY",
-                            color: "#0000FF",
-                            //yValueFormatString: "#,##0K",
-                            dataPoints: [
-                            ]
-                        }, {
-                            type: "line",
-                            showInLegend: true,
-                            name: g4,
-                            markerType: "square",
-                            //xValueFormatString: "DD MMM, YYYY",
-                            color: "#000000",
-                            //yValueFormatString: "#,##0K",
-                            dataPoints: [
-                            ]
-                        }]
-                    };
-                    return options;
-          }
-          function drawLinearGraphs(data, core) {
+          function drawLinearGraphs(data) {
 
               var options = GetOptionsForMetricGraphs("Latency", "Read Latency (ms)", " Write latency (ms)", "(ms)");
               options.data[0].dataPoints = [];
@@ -1135,37 +1176,6 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                   options.data[1].dataPoints.push({x: i, y: data[7][i]});
               }
               $("#chartContainerSpace").CanvasJSChart(options);
-
-              options = GetOptionsForMetricGraphs2("DBN Alloc V/S Write Latency", "Alloc", "Bitmap", "Load buf", "Fast write", "(millis)");
-              options.title.text = "DBN Allocation latency";
-              options.data[0].dataPoints = [];
-              options.data[1].dataPoints = [];
-              options.data[2].dataPoints = [];
-              options.data[3].dataPoints = [];
-
-              for (var i=0;i<120;i++) {
-                  options.data[0].dataPoints.push({x: i, y: core[8][i]});
-                  options.data[1].dataPoints.push({x: i, y: core[9][i]});
-                  options.data[2].dataPoints.push({x: i, y: core[10][i]});
-                  options.data[3].dataPoints.push({x: i, y: core[11][i]});
-              }
-              $("#chartCoreDBNAlloc").CanvasJSChart(options);
-
-              options = GetOptionsForMetricGraphs2("WRLoader", "Allocs", "Deallocs", "Usage", "Queued", "(8k blocks)");
-              options.title.text = "Blocks allocs versus frees, USD_BLKS and drain CNt";
-              options.data[0].dataPoints = [];
-              options.data[1].dataPoints = [];
-              options.data[2].dataPoints = [];
-              options.data[3].dataPoints = [];
-
-              for (var i=0;i<120;i++) {
-                  options.data[0].dataPoints.push({x: i, y: core[12][i]});
-                  options.data[1].dataPoints.push({x: i, y: core[13][i]});
-                  options.data[2].dataPoints.push({x: i, y: core[14][i]});
-                  options.data[3].dataPoints.push({x: i, y: core[15][i]});
-              }
-              $("#chartAllocAndFrees").CanvasJSChart(options);
-
           }
 
           //Refresh thread, refreshes every 1 second
@@ -1176,8 +1186,8 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
                    $.get("allmetrics", function( datastr ) {
                       var data = JSON.parse(datastr);
-                      $scope.isDebugDataForGraphs = datastr;
-                      drawLinearGraphs(JSON.parse(data.dokan), JSON.parse(data.core));
+                      $scope.isDebugDataForGraphs = JSON.stringify(data);
+                      drawLinearGraphs(data);
                    });
 
               }

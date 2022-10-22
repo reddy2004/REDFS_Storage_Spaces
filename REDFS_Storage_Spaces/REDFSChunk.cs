@@ -504,7 +504,7 @@ namespace REDFS_ClusterMode
             return (int)(start_dbn / OPS.NUM_DBNS_IN_1GB);
         }
 
-        public static long GetDBNSpaceSegmentOffsetToStartDbn(int offset)
+        public static long GetDBNSpaceSegmentOffsetToStartDbn(long offset)
         {
             return offset * OPS.NUM_DBNS_IN_1GB;
         }
@@ -661,12 +661,17 @@ namespace REDFS_ClusterMode
 
         public void tServiceThread()
         {
+            long raid5ClearedStripes = 0;
+
             while (!mTerminateThread)
             {
                 Thread.Sleep(10);
                 lock (GLOBALQ.m_deletelog_spanmap)
                 {
                     int count = GLOBALQ.m_deletelog_spanmap.Count;
+
+                    if (count == 0) continue;
+                    if (count > 1000) count = 1000;
 
                     try
                     {
@@ -677,6 +682,8 @@ namespace REDFS_ClusterMode
 
                             GLOBALQ.m_deletelog_spanmap.RemoveAt(0);
 
+                            //DEFS.ASSERT(false, "logic broken, dbn will simply map to some offset in spanmap, if it maps to say somesegment" +
+                            //    "which is position 1.2 or 3 of raid segments, we end up not freeing anything at all or updating the totalfreelbok metric");
                             int start_at = DBNSegmentSpan.GetDBNSpaceSegmentOffset(dbn);
                             if (startDBNToDBNSegmentSpan[start_at] != null && startDBNToDBNSegmentSpan[start_at].isSegmentValid)
                             {
@@ -684,12 +691,18 @@ namespace REDFS_ClusterMode
                                 {
                                     //As we have wafl style write, free should ideally give 4 dbns for raid5. we can free individually at each segemnt
                                     //as we know it will come in the deletelog queue.
-                                    if (dbn % 4 == 0 && startDBNToDBNSegmentSpan[start_at].position == 0)
+                                    if (dbn % 4 == 0)// && startDBNToDBNSegmentSpan[start_at].position == 0)
                                     {
                                         startDBNToDBNSegmentSpan[start_at].totalFreeBlocks += 1;
                                         startDBNToDBNSegmentSpan[start_at + 1].totalFreeBlocks += 1;
                                         startDBNToDBNSegmentSpan[start_at + 2].totalFreeBlocks += 1;
                                         startDBNToDBNSegmentSpan[start_at + 3].totalFreeBlocks += 1;
+                                        raid5ClearedStripes++;
+
+                                        if (raid5ClearedStripes % 100 == 0)
+                                        {
+                                            Console.WriteLine("Cleared stripes = " + raid5ClearedStripes);
+                                        }
                                     }
                                     else
                                     {
@@ -699,7 +712,10 @@ namespace REDFS_ClusterMode
                                 else
                                 {
                                     startDBNToDBNSegmentSpan[start_at].totalFreeBlocks += 1;
-                                    //Console.WriteLine("Freeing " + dbn + " @ " + startDBNToDBNSegmentSpan[start_at].type + " FB: " + startDBNToDBNSegmentSpan[start_at].totalFreeBlocks);
+                                    if (startDBNToDBNSegmentSpan[start_at].totalFreeBlocks > 131070)
+                                    {
+                                        Console.WriteLine("Freeing " + dbn + " @ " + startDBNToDBNSegmentSpan[start_at].type + " FB: " + startDBNToDBNSegmentSpan[start_at].totalFreeBlocks);
+                                    }
                                 }
                                 isDirty = true;
                             }
@@ -1006,6 +1022,8 @@ namespace REDFS_ClusterMode
                             {
                                 max_dbn = edbn;
                             }
+
+                            isDirty = true;
                     }
                     else
                     {
