@@ -40,10 +40,6 @@ namespace REDFS_ClusterMode
         {
             lock (iStack)
             {
-                if (iStackTop == 65534)
-                {
-                    Console.WriteLine("for debug to hit!");
-                }
                 RedBufL0 wb = iStack[iStackTop];
                 iStack[iStackTop] = null;
 

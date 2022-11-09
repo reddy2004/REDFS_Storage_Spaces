@@ -55,6 +55,9 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
     $scope.compressionAndDedupeData = {};
 
+    $scope.visualizerTextKonvaItem1 = "";
+    $scope.visualizerTextKonvaItem2 = "";
+
     $scope.toggleDebug = function() {
         $scope.showdebuginfo = ($scope.showdebuginfo == false)? true : false;
     }
@@ -227,8 +230,456 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
         $("#newSegmentModal").modal();
     }
 
-    $scope.visualizeSegment = function(id) {
-        alert(id);
+    $scope.showFullSegmentSpanmap = function()
+    {
+              $(".loader").show();
+              $('#table_spanmap').hide();
+        
+             $("#allSegmentMapDisplayPopUp").modal();
+
+            if (volumeTable != null)
+              volumeTable.destroy();
+
+                var dataTable = [];
+                for (var i=0;i<$scope.listOfKnownSegmentsInContainer.length;i++) {
+                    if ($scope.listOfKnownSegmentsInContainer[i].isSegmentValid) {
+                            dataTable.push({
+                                'id': i,
+                                'start_dbn' : $scope.listOfKnownSegmentsInContainer[i].start_dbn,
+                                'num_segments' : $scope.listOfKnownSegmentsInContainer[i].num_segments,
+                                'totalFreeBlocks' : $scope.listOfKnownSegmentsInContainer[i].totalFreeBlocks,
+                                'type' : $scope.listOfKnownSegmentsInContainer[i].type,
+                                'isBeingPreparedForRemoval' : false,
+                                'dataSegments' : JSON.stringify($scope.listOfKnownSegmentsInContainer[i].dataSegment),
+                                'paritySegment' : $scope.listOfKnownSegmentsInContainer[i].paritySegment
+
+                            });
+                    }
+                }
+
+            var dData = dataTable;
+            volumeTable = $('#table_spanmap').DataTable( {
+                data: dData,
+                columns: [
+                {
+                    data: "id",
+                    title: "Segment ID"
+                },
+                {
+                    data: "start_dbn",
+                    title: "Start DBN"
+                },
+                {
+                    data: "totalFreeBlocks",
+                    title: "Free Blocks"
+                },
+                {
+                    data: "type",
+                    title: "Type"
+                },
+                {
+                    data: "dataSegments",
+                    title: "Data Segments"
+                },
+                {
+                    data: "paritySegment",
+                    title: "Parity Segments"
+                },
+                ]
+            } );
+            $(".loader").hide();
+            $('#table_spanmap').show(); 
+    }
+
+    var checkRedFSSpaceSegmentHaveChunk = function(segmentInfo, chunkid, chunkoffset)
+    {
+        if (segmentInfo.type == 0) {
+            if (segmentInfo.dataSegments[0].chunkID &&
+                    segmentInfo.dataSegments[0].chunkOffset == chunkoffset)
+            {
+                return true;
+            }
+            return false;
+        } else if (segmentInfo.type == 1) {
+            if (segmentInfo.dataSegments[0].chunkID &&
+                    segmentInfo.dataSegments[0].chunkOffset == chunkoffset)
+            {
+                return true;
+            }
+            if (segmentInfo.dataSegments[1].chunkID &&
+                    segmentInfo.dataSegments[1].chunkOffset == chunkoffset)
+            {
+                return true;
+            }
+            return false;
+        } else if (segmentInfo.type == 2) {
+            for (var i=0;i<4;i++) {
+                if (segmentInfo.dataSegments[i].chunkID &&
+                        segmentInfo.dataSegments[i].chunkOffset == chunkoffset)
+                {
+                    return true;
+                }                
+            }
+            if (segmentInfo.paritySegment[0].chunkID &&
+                    segmentInfo.paritySegment[0].chunkOffset == chunkoffset)
+            {
+                return true;
+            }
+            return false;
+        } else {
+            return false;
+        }
+    }
+
+    //given any chunkid + offset, see which dbns space segment this maps to
+    var chunkSegmentToRedfsSegmentId = function(chunkid, chunkoffset)
+    {
+            for (var i=0;i<$scope.listOfKnownSegmentsInContainer.length;i++) 
+            {
+                    if ($scope.listOfKnownSegmentsInContainer[i].isSegmentValid && 
+                        checkRedFSSpaceSegmentHaveChunk($scope.listOfKnownSegmentsInContainer[i], chunkid, chunkoffset) == true) {
+                        return ($scope.listOfKnownSegmentsInContainer[i].start_dbn/131072);
+                    }
+            }
+            return -1;
+    }
+
+    //given a mouse positiion, ie. x position, return the segment offset in that chunk
+    var getSegmentOffsetForChunkFromMousePosition = function(width_in_pixel, chunkid, mouse_x)
+    {
+        var chunksize = 1;
+        for (var i=0;i<$scope.listOfKnownChunksInContainer.length;i++) {
+            if ($scope.listOfKnownChunksInContainer[i].id == chunkid) {
+                chunksize = $scope.listOfKnownChunksInContainer[i].size;
+            }
+        }
+        return ((chunksize * mouse_x)/width_in_pixel);
+    }
+
+    var getSegmentOffsetForDBNSpaceFromMousePosition = function(width_in_pixel, mouse_x)
+    {
+        return (($scope.totalSizeInGB * mouse_x)/width_in_pixel);
+    }
+
+    //given a dbn space segment id, return all the chunks and offsets mapped to it.
+    var getAllChunksAndOffsetsFromDBNSegmentOffset = function(dbnSegmentId)
+    {
+            for (var i=0;i<$scope.listOfKnownSegmentsInContainer.length;i++) 
+            {
+                    if ($scope.listOfKnownSegmentsInContainer[i].isSegmentValid) {
+                        //alert("for " + i + " " + JSON.stringify($scope.listOfKnownSegmentsInContainer[i]));
+                        var segid = ($scope.listOfKnownSegmentsInContainer[i].start_dbn/131072);
+                        if (segid == dbnSegmentId) {
+                            return $scope.listOfKnownSegmentsInContainer[i];
+                        }
+                    }
+            }
+            return null;
+    }
+
+    //do reverse of getSegmentOffsetForChunkFromMousePosition()
+    var getMouseX1andX2RangeToHighlightFromChunkSegmentOffsets = function(chunksize, chunkoffset, width_in_pixel)
+    {
+        var start_x = (chunkoffset * width_in_pixel)/chunksize;
+        var end_x = start_x + (width_in_pixel/chunksize);
+        return {"start" : start_x, "end" : end_x};
+    }
+
+    //same as above but for dbn space, actually the above could be used as well.
+    var getMouseX1andX2RangetoHighlightForDBNSpaceSegmentFromMousePosition = function(redfsSizeInGB, segmentoffset, width_in_pixel)
+    {
+        var start_x = (segmentoffset * width_in_pixel)/redfsSizeInGB;
+        var end_x = start_x + (width_in_pixel/redfsSizeInGB);
+        return {"start" : Math.ceil(start_x), "end" : Math.floor(end_x)};
+    }
+
+    var resetAllChunkHighlighters = function()
+    {
+        for (var cid= 0; cid < $scope.listOfKnownChunksInContainer.length; cid++) {
+                $scope.listOfKnownChunksInContainer[cid].chunkHighlightRect.width(1);
+                $scope.listOfKnownChunksInContainer[cid].chunkHighlightRect.x(0);
+                $scope.listOfKnownChunksInContainer[cid].chunkHighlightRect.draw();
+        }
+        $scope.visualizerLayerKonvaItem.draw();
+
+    }
+
+    var getStorageItemFromMouseXY = function(num_chunks, x , y, maxx, maxy)
+    {
+        if (y > 0 && y < 50)// && y > 0 && y < maxy)
+        {
+            var dbnoffset = Math.floor( getSegmentOffsetForDBNSpaceFromMousePosition(maxx, x));
+
+            var xandy = getMouseX1andX2RangetoHighlightForDBNSpaceSegmentFromMousePosition($scope.totalSizeInGB, dbnoffset, maxx);
+            $scope.dbnSpaceHighLightRect.width(xandy.end - xandy.start);
+            $scope.dbnSpaceHighLightRect.x(xandy.start);
+            $scope.dbnSpaceHighLightRect.draw();
+             $scope.visualizerLayerKonvaItem.draw();
+
+             resetAllChunkHighlighters();
+
+            $scope.visualizerTextKonvaItem1.text("mouse x: " + x + ", y:" + y + " choosen:dbnspace  & range:" + maxx + "," + maxy);
+            $scope.visualizerTextKonvaItem2.text("num_chunks: " + num_chunks + ", dbnspaceoffet : " + dbnoffset + " xandy :" + JSON.stringify(xandy));
+            //console.log("mouse x: " + x + ", y:" + y + " choosen:dbnspace  & range:" + maxx + "," + maxy);
+
+            //We also need to update the corresponding chunks where this dbnspace segment is mapped to.
+            var segmentInfo = getAllChunksAndOffsetsFromDBNSegmentOffset(dbnoffset);
+            //alert(JSON.stringify(segmentInfo) + " maps to dbnspace offset " + dbnoffset);
+            if (segmentInfo.type == 0) {
+                var cid = segmentInfo.dataSegment[0].chunkID;
+                var xandy = getMouseX1andX2RangeToHighlightFromChunkSegmentOffsets($scope.listOfKnownChunksInContainer[cid].size,segmentInfo.dataSegment[0].chunkOffset, $scope.listOfKnownChunksInContainer[cid].width_in_pixel);
+                $scope.listOfKnownChunksInContainer[cid].chunkHighlightRect.width(xandy.end - xandy.start);
+                $scope.listOfKnownChunksInContainer[cid].chunkHighlightRect.x(xandy.start);
+                $scope.listOfKnownChunksInContainer[cid].chunkHighlightRect.draw();
+                //alert("cid = " + JSON.stringify($scope.listOfKnownChunksInContainer[cid]) + "   xandy :" + JSON.stringify(xandy));
+            } else if (segmentInfo.type == 1) {
+                //segmentInfo.dataSegment[0].chunkOffset
+                //segmentInfo.dataSegment[1].chunkOffset
+            } else if (segmentInfo.type == 2) {
+                //segmentInfo.dataSegment[0].chunkOffset
+                //segmentInfo.dataSegment[1].chunkOffset
+                //segmentInfo.dataSegment[2].chunkOffset
+                //segmentInfo.dataSegment[3].chunkOffset
+                //segmentInfo.paritySegment[0].chunkOffset
+            }
+            $scope.visualizerLayerKonvaItem.draw();
+            return "dbnspace";
+        }
+
+        for (var i = 0;i< num_chunks;i++) {
+            if (y > (160 + i * 60) && y < (210 + i * 60) ){//&& y > 0 && y < maxy) {
+                var chunkoffset = Math.floor( getSegmentOffsetForChunkFromMousePosition(maxx, i, x));
+                $scope.visualizerTextKonvaItem1.text("mouse x: " + x + ", y:" + y + " choosen:chunk_" + i  +  " & range:" + maxx + "," + maxy);
+                $scope.visualizerTextKonvaItem2.text("num_chunks: " + num_chunks + " chunkid : " + i + ", offset : " + chunkoffset);
+                console.log("mouse x: " + x + ", y:" + y + " choosen:chunk_" + i  +  " & range:" + maxx + "," + maxy);
+                $scope.visualizerLayerKonvaItem.draw();
+                return "chunk_" + i;
+            }
+        }
+        return "";
+    }
+
+    $scope.visualizeSegment = function(visualizeid) {
+
+        $("#visualizer").modal();
+
+        $("#konvaPadVisualizer").html("");
+
+        setTimeout(function() {
+            var konvadiv = $("<div id='konvadiv2'> </div>"); 
+            $("#konvaPadVisualizer").html("");
+            $('#konvaPadVisualizer').prepend(konvadiv);
+
+            var num_chunks = $scope.listOfKnownChunksInContainer.length;
+            var height_in_pixel = 50 * (num_chunks + 1) + num_chunks * 10 + 120;
+            var width_in_pixel = $("#konvaPadVisualizer").width();
+
+            width_in_pixel = width_in_pixel;
+
+            var max_chunk_size = $scope.totalSizeInGB;
+            var chunk_usage_from_segment_map = $scope.listOfKnownValidSegmentsInContainer.length;
+
+            /*
+            for (var i=0;i<$scope.listOfKnownChunksInContainer.length;i++)
+            {
+                if ($scope.listOfKnownChunksInContainer[i].size > max_chunk_size) {
+                    max_chunk_size = $scope.listOfKnownChunksInContainer[i].size;
+                }
+            }
+            */
+            for (var i=0;i<$scope.listOfKnownChunksInContainer.length;i++)
+            {
+                $scope.listOfKnownChunksInContainer[i].width_in_pixel = 
+                        Math.ceil(($scope.listOfKnownChunksInContainer[i].size * width_in_pixel) / max_chunk_size);
+            }
+
+            $('#konvaPad').innerHTML = '';
+             
+                  var stage = new Konva.Stage({
+                        container: 'konvadiv2',
+                        width: width_in_pixel,
+                        height: height_in_pixel,
+                        draggable: false,
+                        x: 0,
+                        y: 0,
+                        color: 'yellow',
+                        fill : 'yellow'           
+                  });
+                  
+                  var layer2 = new Konva.Layer();
+                  stage.add(layer2);
+                  
+                  var infoRect = new Konva.Rect({
+                      x: 0,
+                      y: 0,
+                      width: width_in_pixel,
+                      height: 50,
+                      fill: 'darkgray',
+                      opacity: 50,
+                      stroke: 'black',
+                      cornerRadius: 0,
+                      shadowBlur: 0,
+                      shadowOffsetX: 0,
+                      shadowOffsetY: 0,
+                      name: 'dbnspace'
+                  });
+
+                  var widthForFreeAddressSpace = width_in_pixel - Math.ceil((width_in_pixel * chunk_usage_from_segment_map)/max_chunk_size);
+                  //alert("max_chunk_size = " + max_chunk_size +  ",  widthForFreeAddressSpace = " + widthForFreeAddressSpace + " and chunk_usage_from_segment_map = " + chunk_usage_from_segment_map + " $scope.listOfKnownValidSegmentsInContainer.length = "  + $scope.listOfKnownValidSegmentsInContainer.length);
+                  var infoRect22 = new Konva.Rect({
+                      x: (width_in_pixel - widthForFreeAddressSpace),
+                      y: 1,
+                      width: widthForFreeAddressSpace,
+                      height: 48,
+                      fill: 'white',
+                      opacity: 50,
+                      stroke: 'black',
+                      cornerRadius: 0,
+                      shadowBlur: 0,
+                      shadowOffsetX: 0,
+                      shadowOffsetY: 0,
+                      name: 'dbnspace22'
+                  });
+
+                  var dbnSpaceHighLightRect = new Konva.Rect({
+                      x: 0,
+                      y: 0,
+                      width: 1,
+                      height: 49,
+                      fill: 'red',
+                      opacity: 100,
+                      stroke: 'red',
+                      cornerRadius: 0,
+                      shadowBlur: 0,
+                      shadowOffsetX: 0,
+                      shadowOffsetY: 0,
+                      name: 'dbnspace'
+                  });
+
+                    var text3 = new Konva.Text({
+                        x: 10,
+                        y: 5,
+                        fontFamily: 'Verdana',
+                        fontSize: 14,
+                        text: "RedFS address space (sum of all chunks, both used and unused)",
+                        fill: 'black'
+                    }); 
+
+                    var text4 = new Konva.Text({
+                        x: 10,
+                        y: 65,
+                        fontFamily: 'Verdana',
+                        fontSize: 15,
+                        text: "data",
+                        fill: 'black'
+                    }); 
+                    var text5 = new Konva.Text({
+                        x: 10,
+                        y: 85,
+                        fontFamily: 'Verdana',
+                        fontSize: 15,
+                        text: "data",
+                        fill: 'black'
+                    }); 
+
+                   $scope.visualizerTextKonvaItem1 = text4;
+                   $scope.visualizerTextKonvaItem2 = text5;
+                   $scope.dbnSpaceHighLightRect = dbnSpaceHighLightRect;
+                  layer2.add(infoRect);
+                  layer2.add(infoRect22);
+                  layer2.add(dbnSpaceHighLightRect);
+                  layer2.add(text3);
+                  layer2.add(text4);
+                  layer2.add(text5);
+                  layer2.draw();
+                  
+                  for (var i =0;i<num_chunks; i++) {
+                          var infoRect = new Konva.Rect({
+                              x: 0,
+                              y: 160 + i * 60 ,
+                              width: $scope.listOfKnownChunksInContainer[i].width_in_pixel,
+                              height: 50,
+                              fill: 'lightblue',
+                              opacity: 100,
+                              stroke: 'black',
+                              cornerRadius: 5,
+                              shadowBlur: 10,
+                              shadowOffsetX: 10,
+                              shadowOffsetY: 3,
+                              name: 'chunk_' + i,
+
+                          });
+                          var chunkHighlightRect = new Konva.Rect({
+                              x: 0,
+                              y: 160 + i * 60 ,
+                              width: 1,
+                              height: 49,
+                              fill: 'red',
+                              opacity: 10,
+                              stroke: 'red',
+                              cornerRadius: 5,
+                              shadowBlur: 0,
+                              shadowOffsetX: 0,
+                              shadowOffsetY: 0,
+                              name: 'chunkx_' + i,
+
+                          });
+                        var text3 = new Konva.Text({
+                            x: 10,
+                            y: 175 + i * 60,
+                            fontFamily: 'Verdana',
+                            fontSize: 14,
+                            opacity: 50,
+                            text: "chunk " + i,
+                            fill: 'black'
+                        }); 
+                          
+                          $scope.listOfKnownChunksInContainer[i].chunkHighlightRect = chunkHighlightRect;
+                          layer2.add(infoRect);  
+                          layer2.add(text3);
+                          layer2.add(chunkHighlightRect);                 
+                  }
+
+                  layer2.add(infoRect);
+
+                  stage.batchDraw();
+
+                  stage.on('click', function (e) {
+                     //alert(e.target.name());
+                      if (!(typeof e.target.name() == "undefined")) {
+                          if (e.target.name() == "DIV") {
+                            console.log("cannot edit this..");
+                            alert("Currently you cannot edit the DIV section from within the UI, Edit JSON directly and upload it to the right place and refresh this page");
+                          } else {
+                            if (e.target.name() == "dbnspace") {
+                              //$scope = angular.element('[ng-controller=myCtrl]').scope();
+                              //$scope.$apply(function () {
+                               //   $("#createNewVolumeFromRootVolume").modal();
+                              //});
+                            } else {
+                                //var chunkid = parseInt(e.target.name().substring(6, e.target.name().length));
+                            }
+                        }
+                    }
+                });
+
+                $scope.visualizerLayerKonvaItem = layer2;
+
+                layer2.on('mousemove', function (e) {
+                    var pos = stage.getPointerPosition();
+
+                    var choosenitem = getStorageItemFromMouseXY(num_chunks, pos.x, pos.y, width_in_pixel, height_in_pixel);
+                    
+                    if (choosenitem == "dbnspace") {
+
+                    } else {
+                        var chunkid = parseInt(choosenitem.substring(6, choosenitem.length));
+                    }
+
+                });
+
+
+        }, 1000);
     }
 
     $scope.DropDownChnaged = function()
@@ -239,7 +690,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
         for (var i=0;i<num_chunks;i++) {
             all_chunk_paths.push($scope.listOfKnownChunksInContainer[i].path);
         }
-        var speedclass = $("#segmenttype").val();
+        var speedclass = $("#segmenttype66").val();
 
         //alert(speedclass);
         if (speedclass == "segmentDefault") {
@@ -257,7 +708,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
             if (num_chunks < 2) {
                 alert("You need atleast two chunks to created a mirrored segment in RedFS address space");
                 $("#segmenttype").val("segmentDefault");
-                $scope.DropDownChnaged();
+                //$scope.DropDownChnaged();
                 return;
             }
             $scope.showchunkoption1forsegment = true;
@@ -273,7 +724,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
             if (num_chunks < 5) {
                 alert("You need atleast five chunks to created a 4D1P segment in RedFS address space");
                 $("#segmenttype").val("segmentDefault");
-                $scope.DropDownChnaged();
+                //$scope.DropDownChnaged();
                 return;
             }
             $scope.showchunkoption1forsegment = true;
@@ -513,7 +964,52 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
     $scope.addNewSegmentForCurrentContainer = function()
     {
-        alert("not yet implimented!");
+        var sizeInGB = $scope.sizeingb11;
+
+        var segmenttype1 = $("#segmenttype1").val();
+        var segmenttype2 = $("#segmenttype2").val();
+        var segmenttype3 = $("#segmenttype3").val();
+        var segmenttype4 = $("#segmenttype4").val();
+        var segmenttype5 = $("#segmenttype5").val();
+
+        var segmenttype = $scope.segmenttype66;
+
+        var chunkid = -1;
+
+        if (segmenttype == "segmentDefault") {
+            //first check that the size is available in the chunk.
+            //get the chunk id
+            for (var i=0;i<$scope.listOfKnownChunksInContainer.length;i++) {
+                if ($scope.listOfKnownChunksInContainer[i].path == segmenttype1) {
+                    chunkid = $scope.listOfKnownChunksInContainer[i].id;
+                    var freeSpaceInGB = $scope.listOfKnownChunksInContainer[i].freeSpace/1024;
+                    if (freeSpaceInGB >= sizeInGB) {
+                        
+                         var datax = {"sizeInGB": sizeInGB, "segmentTypeString": segmenttype, "chunkIDs": [chunkid]};
+                          $.ajax({
+                              type: 'POST',
+                              url: '/createNewSegment',
+                              data: JSON.stringify (datax),
+                              success: function(data) {
+                                 //alert('data: ' + data);
+                                 //callback();
+                                window.location.href='/config';
+                              },
+                              contentType: "application/json",
+                              dataType: 'json'
+                          });
+                          $("#newSegmentModal").modal('hide');
+
+                    }
+                    else
+                    {
+                        alert("selected chunk does not have enough free space");
+                    }
+                }
+            }
+        } else {
+            alert("not yet supported for mirror and raid 5 type");
+        }
     }
 
     $scope.addNewChunkForCurrentContainer = function()
@@ -648,7 +1144,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                     $scope.isDebugDataForChunkFiles = data;
                     
                     $scope.listOfKnownChunksInContainer = JSON.parse(data);
-                    
+                    //alert(data);
                     $scope.totalSizeInGB = 0;
                     $scope.totalFreeChunkSpace = 0;
                     //alert($scope.listOfKnownChunksInContainer.length);
@@ -674,18 +1170,43 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                 });
                 
                 //now create an array to copy necessary information to display
+
+                var max_valid_segment = 0;
+                var add_empty_entries = 0;
                 for (var i=0;i<$scope.listOfKnownSegmentsInContainer.length;i++) {
                     if ($scope.listOfKnownSegmentsInContainer[i].isSegmentValid) {
+                        max_valid_segment++;
+                    }
+                }
+                //alert(max_valid_segment);
+                for (var i=0;i<max_valid_segment;i++) {
+                    if ($scope.listOfKnownSegmentsInContainer[i].isSegmentValid) {
 
-                        $scope.listOfKnownValidSegmentsInContainer.push({
-                            'id': i,
-                            'start_dbn' : $scope.listOfKnownSegmentsInContainer[i].start_dbn,
-                            'num_segments' : $scope.listOfKnownSegmentsInContainer[i].num_segments,
-                            'totalFreeBlocks' : $scope.listOfKnownSegmentsInContainer[i].totalFreeBlocks,
-                            'type' : $scope.listOfKnownSegmentsInContainer[i].type,
-                            'isBeingPreparedForRemoval' : false
+                        if (i < 2 || i >  max_valid_segment - 2) {
+                            $scope.listOfKnownValidSegmentsInContainer.push({
+                                'id': i,
+                                'start_dbn' : $scope.listOfKnownSegmentsInContainer[i].start_dbn,
+                                'num_segments' : $scope.listOfKnownSegmentsInContainer[i].num_segments,
+                                'totalFreeBlocks' : $scope.listOfKnownSegmentsInContainer[i].totalFreeBlocks,
+                                'type' : $scope.listOfKnownSegmentsInContainer[i].type,
+                                'isBeingPreparedForRemoval' : false,
+                                'dataSegments' : $scope.listOfKnownSegmentsInContainer[i].dataSegment
 
-                        });
+                            });
+                        } else {
+                            if (add_empty_entries++ < 2) {
+                                    $scope.listOfKnownValidSegmentsInContainer.push({
+                                        'id': '...',
+                                        'start_dbn' : '...',
+                                        'num_segments' : '...',
+                                        'totalFreeBlocks' : '...',
+                                        'type' : '...',
+                                        'isBeingPreparedForRemoval' :'...',
+                                        'dataSegments' : '...'
+
+                                    });                                
+                            }
+                        }
                     }
                 }
                 console.log(data); 

@@ -183,8 +183,10 @@ namespace REDFS_TESTS
                     rba_t.mod_refcount(0, dbnsRaid5[r1], REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC, null, false);
                 }
             }
-
-            Thread.Sleep(60000);
+            rba_t.Sync();
+            rba_t.refCountMap.sync_blocking();
+            Thread.Sleep(120000);
+            rba_t.refCountMap.sync_blocking();
             Assert.AreEqual(2 * OPS.NUM_DBNS_IN_1GB, rba_t.GetAvailableBlocksWithType(SPAN_TYPE.DEFAULT));
             Assert.AreEqual(2 * OPS.NUM_DBNS_IN_1GB, rba_t.GetAvailableBlocksWithType(SPAN_TYPE.MIRRORED));
             Assert.AreEqual(4 * OPS.NUM_DBNS_IN_1GB, rba_t.GetAvailableBlocksWithType(SPAN_TYPE.RAID5));

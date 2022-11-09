@@ -63,6 +63,7 @@ namespace REDFS_ClusterMode
          */
         public int CreateAndInitNewFSIDFromRootVolume()
         {
+            Console.WriteLine("IN CreateAndInitNewFSIDFromRootVolume, numValidFsids = " + numValidFsids);
             int newFsidId = numValidFsids++;
 
             FSIDList[newFsidId] = redfsCore.CreateEmptyFSID(newFsidId);
@@ -293,12 +294,6 @@ namespace REDFS_ClusterMode
                         }
                         catch (Exception e)
                         {
-                            RedFS_Inode srcRootDirWip =  RedfsVolumeTrees[1].GetInode("\\").myWIP;
-                            RedFS_Inode destRootDirWip = RedfsVolumeTrees[2].GetInode("\\").myWIP;
-
-                            PrintableWIP pwip_ifile_t1 = redfsCore.redfs_list_tree(srcRootDirWip, Array.Empty<long>(), Array.Empty<int>());
-                            PrintableWIP pwip_ifile_t2 = redfsCore.redfs_list_tree(destRootDirWip, Array.Empty<long>(), Array.Empty<int>());
-
                             Console.WriteLine(e.Message);
                             throw new SystemException("Error in inowip size/contents duing reload!" + e.Message + " affected " + v.volumeId);
                         }

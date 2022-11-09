@@ -30,7 +30,7 @@ namespace REDFS_ClusterMode
     {
         String absoluteContainerPath;
 
-        public IDictionary redfsChunks = new Dictionary<int, REDFSChunk>();
+        public IDictionary redfsChunks_inner = new Dictionary<int, REDFSChunk>();
 
         public DBNSegmentSpanMap dbnSpanMap;
 
@@ -64,7 +64,7 @@ namespace REDFS_ClusterMode
         public Boolean ComputeSegmentUsageBitMap()
         {
             //Lets find out which segments of each chunk are in use?
-            foreach (REDFSChunk chunk in redfsChunks.Values)
+            foreach (REDFSChunk chunk in redfsChunks_inner.Values)
             {
                 chunk.isSegmentInUse = dbnSpanMap.getSegmentUsageBitmapForChunk(chunk);
             }
@@ -85,10 +85,10 @@ namespace REDFS_ClusterMode
                     {
                         ChunkInfo b2 = JsonConvert.DeserializeObject<ChunkInfo>(line);
                         REDFSChunk rck = new REDFSChunk(b2.id, b2.allowedSegmentTypes, b2.path, b2.size);
-                        redfsChunks.Add(b2.id, rck);
+                        redfsChunks_inner.Add(b2.id, rck);
                     }
                 }
-                Console.WriteLine("Loaded " + redfsChunks.Count + " chunks' information from disk");
+                Console.WriteLine("Loaded " + redfsChunks_inner.Count + " chunks' information from disk");
             } 
             catch (Exception e)
             {

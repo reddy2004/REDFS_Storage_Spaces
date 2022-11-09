@@ -51,6 +51,13 @@ namespace REDFS_ClusterMode
         public long[]   writeOffsets;
     }
 
+    public class SegmentDataInfo
+    {
+        public int sizeInGB;
+        public string segmentTypeString;
+        public int[] chunkIDs; //upto 5 
+    }
+
     public class RAWSegment : IEquatable<RAWSegment>
     {
         public int  chunkID;        /* Which file has data of this segment */
@@ -751,6 +758,19 @@ namespace REDFS_ClusterMode
                 }
             }
             return true;
+        }
+
+        public int GetNumSegmentsUsedInREDFSAddressSpace()
+        {
+            int usedSegments = 0;
+            for (int i = 0; i < OPS.NUM_SPAN_MAX_ALLOWED; i++)
+            {
+                if (startDBNToDBNSegmentSpan[i].isSegmentValid)
+                {
+                    usedSegments++;
+                }
+            }
+            return usedSegments;
         }
 
         public long GetTotalAvailableFreeBlocks()

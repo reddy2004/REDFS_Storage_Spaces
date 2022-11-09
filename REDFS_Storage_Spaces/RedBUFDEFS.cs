@@ -159,6 +159,7 @@ namespace REDFS_ClusterMode
             creation_time = DateTime.Now.ToUniversalTime().Ticks;
             needdbnreassignment = true;
             needtouchbuf = true;
+            m_dbn = DBN.INVALID;
         }
 
         int Red_Buffer.get_level() { return 0; }
@@ -255,6 +256,7 @@ namespace REDFS_ClusterMode
             creation_time = DateTime.Now.ToUniversalTime().Ticks;
             needdbnreassignment = true;
             needtouchbuf = true;
+            m_dbn = DBN.INVALID;
         }
         int Red_Buffer.get_level() { return 1; }
         BLK_TYPE Red_Buffer.get_blk_type() { return BLK_TYPE.REGULAR_FILE_L1; }
@@ -281,6 +283,7 @@ namespace REDFS_ClusterMode
         void Red_Buffer.set_touchrefcnt_needed(bool v) { needtouchbuf = v; }
 
         void Red_Buffer.touch() { creation_time = DateTime.Now.ToUniversalTime().Ticks; }
+
         public bool isTimetoClear()
         {
             long curr = DateTime.Now.ToUniversalTime().Ticks;
@@ -359,6 +362,7 @@ namespace REDFS_ClusterMode
             }
             creation_time = DateTime.Now.ToUniversalTime().Ticks;
             needdbnreassignment = true;
+            m_dbn = DBN.INVALID;
         }
         int Red_Buffer.get_level() { return 2; }
         BLK_TYPE Red_Buffer.get_blk_type() { return BLK_TYPE.REGULAR_FILE_L2; }

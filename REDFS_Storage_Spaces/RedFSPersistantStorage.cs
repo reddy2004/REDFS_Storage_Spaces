@@ -251,6 +251,12 @@ namespace REDFS_ClusterMode
         public void ExecuteReadPlanSingle(ReadPlanElement r,Red_Buffer wb)
         {
             ChunkFileStorage cfs = (ChunkFileStorage)chunkFileHandles[r.chunkId];
+
+            if (wb.get_ondisk_dbn() == 0)
+            {
+                Array.Clear(wb.buf_to_data(), 0, OPS.FS_BLOCK_SIZE);
+                return;
+            }
             lock (cfs)
             {
                 cfs.Read(wb.buf_to_data(), r.readOffset, 0, wb.buf_to_data().Length);

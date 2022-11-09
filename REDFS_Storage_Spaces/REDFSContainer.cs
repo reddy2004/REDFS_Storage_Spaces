@@ -98,8 +98,15 @@ namespace REDFS_ClusterMode
 
             if (volumeManager.newRootVolumeCreated)
             {
-                ifsd_mux.CreateZeroRootVolume();
-                volumeManager.newRootVolumeCreated = false;
+                try
+                {
+                    ifsd_mux.CreateZeroRootVolume();
+                    SaveChunkListToDisk("from new root volume");
+                } 
+                catch (Exception e)
+                {
+                    Console.WriteLine(e.Message);
+                }
             }
 
             //All chunks must've been inserted into the persistantstorage object by now.
@@ -231,7 +238,7 @@ namespace REDFS_ClusterMode
                 {
                     using (StreamWriter sw = new StreamWriter(chunksFile))
                     {
-                        foreach (var chunk in redfsChunks.Values)
+                        foreach (ChunkInfo chunk in redfsChunks.Values)
                         {
                             String vstr = JsonConvert.SerializeObject(chunk, Formatting.None);
                             //Console.WriteLine(vstr);
@@ -271,6 +278,46 @@ namespace REDFS_ClusterMode
             else
             {
                 Console.WriteLine("Cannot delete chunk " + id + " as its not marked for delete");
+                return false;
+            }
+        }
+
+        /*
+         * Called from the http server. We have been given a chunk and that chunk will have empty slots
+         * so we have to allocate and map them into the redfs addressspace
+         */ 
+        public Boolean AddNewSegmentsIntoREDFSAddressSpace(SegmentDataInfo sdi)
+        {
+            int sizeToAllocate = sdi.sizeInGB;
+
+            if (sdi.segmentTypeString == "segmentDefault")
+            {
+                int useableOffset = ((ChunkInfo)redfsChunks[sdi.chunkIDs[0]]).size - (((ChunkInfo)redfsChunks[sdi.chunkIDs[0]]).freeSpace) / 1024;
+                DEFS.ASSERT(sdi.chunkIDs.Length == 1, "Should have only one target chunk passed!");
+
+                if (sizeToAllocate > ((((ChunkInfo)redfsChunks[sdi.chunkIDs[0]]).freeSpace) / 1024))
+                {
+                    return false;
+                }
+                int dbnSpaceSegmentOffsetToStartFrom = ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap.GetNumSegmentsUsedInREDFSAddressSpace();
+
+                for (int i=0;i<sizeToAllocate;i++)
+                {
+                    RAWSegment[] dataDefault1 = new RAWSegment[1];
+                    dataDefault1[0] = new RAWSegment(SEGMENT_TYPES.Default, sdi.chunkIDs[0], useableOffset + i);
+                    DBNSegmentSpan dss1 = new DBNSegmentSpan(SPAN_TYPE.DEFAULT, (dbnSpaceSegmentOffsetToStartFrom + i) *OPS.NUM_DBNS_IN_1GB, dataDefault1, null);
+
+                    DBNSegmentSpanMap spanMap = ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap;
+                    spanMap.InsertDBNSegmentSpan(dss1);
+                }
+
+                ((ChunkInfo)redfsChunks[sdi.chunkIDs[0]]).freeSpace -= sizeToAllocate * 1024;
+                SaveChunkListToDisk("from update");
+                return true;
+            }
+            else
+            {
+                Console.WriteLine("Mirror and RAID types are not yet supported!");
                 return false;
             }
         }

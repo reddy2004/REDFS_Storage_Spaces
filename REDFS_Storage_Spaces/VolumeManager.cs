@@ -86,7 +86,6 @@ namespace REDFS_ClusterMode
              * The container must create a fsid[0] for this
              */ 
             newRootVolumeCreated = true;
-
             return true;
         }
 

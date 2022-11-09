@@ -33,5 +33,26 @@ namespace REDFS_ClusterMode
                 */
             }
         }
+
+        public static void DEBUG_RED(String dbg)
+        {
+            Console.BackgroundColor = ConsoleColor.Red;
+            Console.WriteLine("ASSERT :: " + dbg);
+            Console.BackgroundColor = ConsoleColor.Black;
+        }
+
+        public static void DEBUG_YELLOW(String dbg)
+        {
+            Console.BackgroundColor = ConsoleColor.Blue;
+            Console.WriteLine("ASSERT :: " + dbg);
+            Console.BackgroundColor = ConsoleColor.Black;
+        }
+
+        public static void DEBUG_GREEN(String dbg)
+        {
+            Console.BackgroundColor = ConsoleColor.Green;
+            Console.WriteLine("ASSERT :: " + dbg);
+            Console.BackgroundColor = ConsoleColor.Black;
+        }
     }
 }

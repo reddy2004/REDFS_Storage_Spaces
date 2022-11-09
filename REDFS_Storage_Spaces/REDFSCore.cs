@@ -36,7 +36,13 @@ namespace REDFS_ClusterMode
             redFSPersistantStorage = new RedFSPersistantStorage(containerName);
 
             redfsBlockAllocator = new REDFSBlockAllocator();
-            redfsBlockAllocator.InitBlockAllocator();
+
+            if (!redfsBlockAllocator.InitBlockAllocator())
+            {
+                Console.WriteLine("Failed to init blockallcoator, terminating!");
+                DEFS.ASSERT(false, "Exiting since block allocator has failed to init");
+                System.Environment.Exit(-11);
+            }
 
             mFreeBufCache = new ZBufferCache();
             mFreeBufCache.init();
@@ -154,18 +160,21 @@ namespace REDFS_ClusterMode
             if (!REDFS.isTestMode)
             {
                 RAWSegment[] dataDefault1 = new RAWSegment[1];
-                dataDefault1[0] = new RAWSegment(SEGMENT_TYPES.Default, 0, 1);
+                dataDefault1[0] = new RAWSegment(SEGMENT_TYPES.Default, 0, 0);
 
                 DBNSegmentSpan dss1 = new DBNSegmentSpan(SPAN_TYPE.DEFAULT, 0, dataDefault1, null);
 
                 RAWSegment[] dataDefault2 = new RAWSegment[1];
-                dataDefault2[0] = new RAWSegment(SEGMENT_TYPES.Default, 0, 2);
+                dataDefault2[0] = new RAWSegment(SEGMENT_TYPES.Default, 0, 1);
                 DBNSegmentSpan dss2 = new DBNSegmentSpan(SPAN_TYPE.DEFAULT, OPS.NUM_DBNS_IN_1GB, dataDefault2, null);
 
                 DBNSegmentSpanMap spanMap = REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap;
                 spanMap.InsertDBNSegmentSpan(dss1);
                 spanMap.InsertDBNSegmentSpan(dss2);
 
+                //Now mark those chunk segments as used.
+                //((REDFSChunk)redfsBlockAllocator.redfsChunks_inner[0]).isSegmentInUse[  -= 2048;
+                //REDFS.redfsContainer.SaveChunkListToDisk("from newcontainer create");
             }
             RedFS_FSID wbfsid  = CreateEmptyFSID(0);
             redFSPersistantStorage.write_fsid(wbfsid);
@@ -308,6 +317,7 @@ namespace REDFS_ClusterMode
 
         public void flush_cache(RedFS_Inode wip, bool inshutdown)
         {
+
             lock (wip)
             {
                 wip._lasthitbuf = null;
@@ -1240,6 +1250,7 @@ namespace REDFS_ClusterMode
             }
             long newdbn = redfsBlockAllocator.allocateDBN(wip, wip.spanType);
 
+            DEFS.ASSERT(newdbn > 0, "new dbn must be greater than 0");
             DEFS.ASSERT(newdbn != wb.get_ondisk_dbn(), "We really have to alloc a new dbn");
 
             REDFS_BUFFER_ENCAPSULATED wbe = new REDFS_BUFFER_ENCAPSULATED(wb);
@@ -1338,11 +1349,6 @@ namespace REDFS_ClusterMode
             DEFS.ASSERT(blength <= buffer.Length && ((buffer.Length - boffset) >= blength),
                                     "Overflow detected in do_io_internal type = " + type);
 
-            if (wip.m_ino == 2)
-            {
-                Console.WriteLine("the root dir!");
-            }
-
             if (wip.get_filesize() < (fileoffset + blength))
             {
                 //DEFS.ASSERT(wip.get_ino() == 0 || type == REDFS_OP.REDFS_WRITE, "Cannot grow wip for " +
@@ -1391,7 +1397,11 @@ namespace REDFS_ClusterMode
                     continue;
                 }
 
+                DEFS.ASSERT(OPS.NUML0(wip.get_filesize()) > fbn, "we cannot load buf beyond eof!");
+
                 RedBufL0 wbl0 = (RedBufL0)redfs_load_buf(wip, 0, fbn, type == REDFS_OP.REDFS_WRITE);
+
+                DEFS.ASSERT(wbl0.m_dbn < 10000000, "Just for testing!");
 
                 if (type == REDFS_OP.REDFS_WRITE)
                 {
@@ -1402,11 +1412,6 @@ namespace REDFS_ClusterMode
                     wbl0.mTimeToLive = 1;
                     redfs_allocate_new_dbntree(wip, wbl0, -1);
                     wip.iohistory = (wip.iohistory << 1) | 0x0000000000000001;
-
-                    if (wbl0.m_dbn == 1052)
-                    {
-                        Console.WriteLine("break here.");
-                    }
                 }
                 else
                 {
@@ -2020,6 +2025,7 @@ namespace REDFS_ClusterMode
                     DEFS.ASSERT(wbl1.needdbnreassignment, "we also need to reassign this dbn in case of overwrite 2");
 
                     wbl1.m_dbn = dbnl1;
+
                     ReadPlanElement rpe = redfsBlockAllocator.PrepareReadPlanSingle(dbnl1);
                     redFSPersistantStorage.ExecuteReadPlanSingle(rpe, wbl1);
 
@@ -2095,7 +2101,8 @@ namespace REDFS_ClusterMode
                 {
                     RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(wip, 1, someL0fbn, forwrite);
 
-                    long dbn0 = wbl1.get_child_dbn( (int)(someL0fbn % OPS.FS_SPAN_OUT));
+                    int idx = (int)(someL0fbn % OPS.FS_SPAN_OUT);
+                    long dbn0 = wbl1.get_child_dbn( idx);
 
                     DEFS.ASSERT(dbn0 != DBN.INVALID, "Invalid dbn found in a valid portion 5, fsize = " +
                         wip.get_filesize() + " wbl1.sfbn = " + wbl1.m_start_fbn + " somel0fbn = " + someL0fbn);

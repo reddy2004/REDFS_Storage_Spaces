@@ -387,6 +387,38 @@ namespace REDFS_ClusterMode
                     }
                     resp.Close();
                 }
+                else if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/createNewSegment"))
+                {
+                    if (isUserValid)
+                    {
+                        string request = new StreamReader(ctx.Request.InputStream).ReadToEnd();
+                        try
+                        {
+                            // we are overloading the same class
+                            SegmentDataInfo b2 = JsonConvert.DeserializeObject<SegmentDataInfo>(request);
+
+                            if (REDFS.redfsContainer.AddNewSegmentsIntoREDFSAddressSpace(b2))
+                            {
+                                string json = JsonConvert.SerializeObject(new GenericSuccessReply(), Formatting.Indented);
+                                byte[] data = Encoding.UTF8.GetBytes(json);
+                                await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                            }
+                            else
+                            {
+                                string json = JsonConvert.SerializeObject(new GenericFailureReply(), Formatting.Indented);
+                                byte[] data = Encoding.UTF8.GetBytes(json);
+                                await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            string json = JsonConvert.SerializeObject(new GenericFailureReply(), Formatting.Indented);
+                            byte[] data = Encoding.UTF8.GetBytes(json);
+                            await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                        }
+                    }
+                    resp.Close();
+                }
                 else if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/addNewChunkForCurrentContainer"))
                 {
 

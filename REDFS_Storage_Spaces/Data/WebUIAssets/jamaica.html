@@ -212,8 +212,8 @@
                     <div class="modal-body">
                         <div>
                             <label for="speedclass"><b>Type of segment</b></label>
-                            <select class="custom-select" id="segmenttype" ng-model="dropValue" ng-change="DropDownChnaged()">
-                              <option value="ss">Select from drop down</option>
+                            <select class="custom-select" id="segmenttype66" ng-model="segmenttype66" ng-change="DropDownChnaged()">
+                              <!-- <option value="ss">Select from drop down</option> -->
                               <option value="segmentDefault">Default</option>
                               <option value="segmentMirrored">Mirrored</option>
                               <option value="segmentRaid5">RAID 5</option>
@@ -223,7 +223,7 @@
                         <div>
                             <label for="sizeingb11"><b>Size in GB (In RedFS address space)</b></label>
                             <div style="width:100%;">
-                                <input type="number" class="form-control" id="sizeingb11" style="width:10%;" placeholder="" min="1" disabled>
+                                <input type="number" class="form-control" ng-model="sizeingb11" id="sizeingb11" style="width:10%;" placeholder="" min="1">
                                 <label for="sizeingbTotal">[ Real Space utilization in host filesystem: 4GB ]</label>
                             </div>
                         </div>
@@ -426,6 +426,35 @@
               </div>
             </div>
            
+
+            <!-- Modal in progress  -->
+            <div class="modal fade" id="allSegmentMapDisplayPopUp" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_4" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_4">Complete Segment Span map</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        Gives the mapping of segments, a.k.a 1GB portions of REDFS Address space and to which (chunks,offsets) that these segments are mapped to.
+                        <table id="table_spanmap" class="display table" style="width:100%;">
+                            <thead>
+                                <tr>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
 
             <!-- Modal in progress -->
             <div class="modal fade" id="listOfFilesAndFoldersForTask" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_10" aria-hidden="true">
@@ -710,6 +739,29 @@
             </div>
            
 
+            <!-- Modal in progress -->
+            <div class="modal fade" id="visualizer" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_11v" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_11"> Segment to Chunks mapping</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body" >
+                         <div class="col-12 bg-light" id="konvaPadVisualizer">
+                             Please wait.
+                        </div>
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+
 
             <div class="container-fluid bg-dark">
                 <div class="row">
@@ -926,7 +978,7 @@
 
                         <br><br><br><br><br><br><br><br>
                         <div class="col-12 bg-light">
-                            <b> Segments </b> <a href="#" ng-click="toggleDebug()"> (debug) </a>
+                            <b> Segments </b> <a href="#" ng-click="toggleDebug()"> (debug) </a> <a href="#" ng-click="showFullSegmentSpanmap()"> (show all) </a>
                             <div ng-show="showdebuginfo" style="color:red;">
                                  <!-- {{isDebugDataForSegments}} -->
                                 <br> <br>
@@ -972,7 +1024,7 @@
                             </table>
                         </div>
 
-                        <br><br><br><br><br><br><br> <br><br><br>
+                        <br><br><br><br><br><br><br><br>
                         <div class="col-12 bg-light">
                             <b> Encryption, Compression & Dedupe options </b>
                             <table>

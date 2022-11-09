@@ -197,20 +197,27 @@ namespace REDFS_ClusterMode
             numBlocks = Num1MBBlocks;
             doSparseCreate = sparse;
 
-            if (doSparseCreate)
+            try
             {
-                FileStream f = new FileStream(path, FileMode.Create);
-                f.SetLength( (long)Num1MBBlocks * (1024 * 1204));
-                f.Flush();
-                f.Close();
+                if (doSparseCreate)
+                {
+                    FileStream f = new FileStream(path, FileMode.Create);
+                    f.SetLength((long)Num1MBBlocks * (1024 * 1204));
+                    f.Flush();
+                    f.Close();
 
-                currentBlock = numBlocks;
-            }
-            else
+                    currentBlock = numBlocks;
+                }
+                else
+                {
+                    bw = new BinaryWriter(new FileStream(path, FileMode.Create));
+                }
+                spanTypesAllowed = types;
+            } 
+            catch (Exception e)
             {
-                bw = new BinaryWriter(new FileStream(path, FileMode.Create));
+                Console.WriteLine("failed to open file, exception : " + e.Message);
             }
-            spanTypesAllowed = types;
             
         }
 

@@ -620,6 +620,7 @@ namespace REDFS_ClusterMode
                 }
 
                 int rbn = REFDEF.dbn_to_rbn(cu.dbn);
+                DEFS.ASSERT(rbn >= 0, "Error in converting the rbn correctly!");
                 total_ops++;
                 counter++;
 
@@ -775,6 +776,8 @@ namespace REDFS_ClusterMode
                     optype == REFCNT_OP.INCREMENT_REFCOUNT_ALLOC ||
                     optype == REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC || 
                     optype == REFCNT_OP.BATCH_INCREMENT_REFCOUNT_ALLOC, "Wrong param in mod_refcount");
+
+            //DEFS.ASSERT(dbn < 10000000, "Just for testing!");
 
             switch (optype)
             {
