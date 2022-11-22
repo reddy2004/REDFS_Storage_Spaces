@@ -202,7 +202,7 @@ namespace REDFS_ClusterMode
                 if (doSparseCreate)
                 {
                     FileStream f = new FileStream(path, FileMode.Create);
-                    f.SetLength((long)Num1MBBlocks * (1024 * 1204));
+                    f.SetLength((long)Num1MBBlocks * (1024 * 1024));
                     f.Flush();
                     f.Close();
 

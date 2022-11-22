@@ -1,6 +1,8 @@
 ﻿using Newtonsoft.Json;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 
@@ -31,6 +33,19 @@ namespace REDFS_ClusterMode
 
         public ZBufferCache mFreeBufCache;
 
+        private MD5 md5 = System.Security.Cryptography.MD5.Create();
+
+        /*
+         * Used in redfs_checkin_wip() and redfs_checkout_wip().
+         * If wip is deleted, then remove it or else keep in memory till the program is completed.
+         * To verify that what we read is the same as what we wrote out during the sesssion.
+         * All updates to wip are written out during sync and fingerprints are updateed in the below dictionary
+         * 
+         * XXX this works only when creating new wips in a new (test) session and does not capture corruptions when opening
+         * an existing container and reading existing files.
+         */ 
+        public IDictionary[] wip_checkin_fps = new Dictionary<int, string>[1024];
+
         public REDFSCore(string containerName)
         {
             redFSPersistantStorage = new RedFSPersistantStorage(containerName);
@@ -39,7 +54,6 @@ namespace REDFS_ClusterMode
 
             if (!redfsBlockAllocator.InitBlockAllocator())
             {
-                Console.WriteLine("Failed to init blockallcoator, terminating!");
                 DEFS.ASSERT(false, "Exiting since block allocator has failed to init");
                 System.Environment.Exit(-11);
             }
@@ -74,31 +88,12 @@ namespace REDFS_ClusterMode
                 else
                 {
                     int deallocs = delete_wip_internal2(wip);
-                    Thread.Sleep(100); //wait to drain
-                    Console.WriteLine("Num deallocs = " + deallocs);
-                    
+                    Thread.Sleep(10); //wait to drain
+
                     for (int i = 0; i < OPS.NUM_PTRS_IN_WIP; i++) { wip.set_child_dbn(i, DBN.INVALID); }
                     wip.is_dirty = false;
                     wip.set_filesize(0);
                     wip.set_ino(0, -1);
-
-                    /*
-                    //PrintableWIP pwip = redfs_list_tree(wip, new long[] { }, new int[] { });
-
-
-                    //Thread.Sleep(10000); //wait to drain
-                    int numFreeBlocks = 0;
-                    for (long dbn=OPS.MIN_ALLOCATABLE_DBN; dbn < OPS.NUM_DBNS_IN_1GB * 2; dbn++)
-                    {
-                        int refcnt1 = 0, childrefcnt1 = 0;
-                        redfsBlockAllocator.GetRefcounts(dbn, ref refcnt1, ref childrefcnt1);
-                        if (refcnt1 == 0)
-                        {
-                            numFreeBlocks++;
-                        }
-                    }
-                    Console.WriteLine("num free blocks! = " + numFreeBlocks);
-                    */
                 }
 
                 //not critical if we shutdown without processing this queue, but will lead to leakage
@@ -191,29 +186,38 @@ namespace REDFS_ClusterMode
             iMapWip.setfilefsid_on_dirty(newFsidId);
             inodeFile.setfilefsid_on_dirty(newFsidId);
 
-            redfs_resize_wip(newFsidId, inodeFile, (long)128 * 1024 * 1024 * 1024, (newFsidId != 0));
+            lock (inodeFile)
+            {
+                redfs_resize_wip(newFsidId, inodeFile, (long)128 * 1024 * 1024 * 1024, (newFsidId != 0));
 
-            redfs_resize_wip(newFsidId, iMapWip, ((long)inodeFile.get_filesize() / OPS.WIP_SIZE) / 8, (newFsidId != 0));
+                redfs_resize_wip(newFsidId, iMapWip, ((long)inodeFile.get_filesize() / OPS.WIP_SIZE) / 8, (newFsidId != 0));
 
-            DEFS.ASSERT(inodeFile.get_filesize() == (long)128 * 1024 * 1024 * 1024, "inowip size mismatch " + inodeFile.get_filesize());
-            DEFS.ASSERT(iMapWip.get_filesize() == ((long)inodeFile.get_filesize() / OPS.WIP_SIZE) / 8, "iMapWip size mismatch " + iMapWip.get_filesize());
+                DEFS.ASSERT(inodeFile.get_filesize() == (long)128 * 1024 * 1024 * 1024, "inowip size mismatch " + inodeFile.get_filesize());
+                DEFS.ASSERT(iMapWip.get_filesize() == ((long)inodeFile.get_filesize() / OPS.WIP_SIZE) / 8, "iMapWip size mismatch " + iMapWip.get_filesize());
 
-            
-            newFsid.set_inodefile_wip(inodeFile);
-            newFsid.set_inodemap_wip(iMapWip);
-            newFsid.set_logical_data(0);
-            newFsid.set_start_inonumber(64);
+                inodeFile.isWipValid = true;
+                iMapWip.isWipValid = true;
 
-            PrintableWIP pwip2bx = redfs_list_tree(inodeFile, new long[] { 0 }, new int[] { 0 });
+                newFsid.set_inodefile_wip(inodeFile);
+                newFsid.set_inodemap_wip(iMapWip);
+                newFsid.set_logical_data(0);
+                newFsid.set_start_inonumber(64);
 
-            sync(inodeFile);
-            sync(iMapWip);
-            flush_cache(inodeFile, true);
-            flush_cache(iMapWip, true);
+                inodeFile.isWipValid = true;
+                iMapWip.isWipValid = true;
 
-            DEFS.ASSERT(inodeFile.get_incore_cnt() == 0, "Dont cache blocks during init");
-            DEFS.ASSERT(iMapWip.get_incore_cnt() == 0, "Dont cache blocks during init");
+                PrintableWIP pwip2bx = redfs_list_tree(inodeFile, new long[] { 0 }, new int[] { 0 });
 
+                sync(inodeFile);
+                sync(iMapWip);
+                flush_cache(inodeFile, true);
+                flush_cache(iMapWip, true);
+
+                DEFS.ASSERT(inodeFile.get_incore_cnt() == 0, "Dont cache blocks during init");
+                DEFS.ASSERT(iMapWip.get_incore_cnt() == 0, "Dont cache blocks during init");
+
+                wip_checkin_fps[newFsidId] = new Dictionary<int, string>();
+            }
             redfsBlockAllocator.allocBitMap32TBFile.fsid_setbit(newFsid.get_fsid());
 
             return newFsid;
@@ -283,7 +287,11 @@ namespace REDFS_ClusterMode
                     throw new SystemException("Inode file must be L2 (level 2 file)");
                 }
             }
-            
+
+            inowip.isWipValid = true;
+            imapwip.isWipValid = true;
+            wip_checkin_fps[target] = new Dictionary<int, string>();
+
             return newone;
         }
 
@@ -338,7 +346,12 @@ namespace REDFS_ClusterMode
                     else
                     {
                         newListL0.Add(wbl0);
-                        OPS.SomeFBNToStartFBN(1, wbl0.m_start_fbn);
+                        int idx_in_parent = wbl0.myidx_in_myparent();
+                        if (wip.get_inode_level() > 0)
+                        {
+                            RedBufL1 wbl1 = (RedBufL1)get_buf3("gc", wip, 1, wbl0.m_start_fbn, true);
+                            DEFS.ASSERT(wbl1.get_child_dbn(idx_in_parent) == wbl0.m_dbn, "Issue during garbage collection, " + wbl1.get_child_dbn(idx_in_parent) + " vs " + wbl0.m_dbn);
+                        }
                         start_fbn_tracker[start_fbn_tracker_ctr++] = OPS.SomeFBNToStartFBN(wip.get_inode_level(), wbl0.m_start_fbn);
                     }
                 }
@@ -364,6 +377,13 @@ namespace REDFS_ClusterMode
                     if (wbl1.is_dirty == true || need_to_keep_L1 == true)
                     {
                         newListL1.Add(wbl1);
+                    }
+                    else
+                    {
+                        if (wip._lasthitbuf != null && wip._lasthitbuf.get_start_fbn() == wbl1.m_start_fbn)
+                        {
+                            wip._lasthitbuf = null; //we are removing so mark this null
+                        }
                     }
                 }
                 wip.L1list.Clear();
@@ -407,8 +427,11 @@ namespace REDFS_ClusterMode
 
         public int NEXT_INODE_NUMBER(RedFS_FSID fsid)
         {
-            int ino = find_free_ino_bit(fsid);
-            return ino;
+            lock (this)
+            {
+                int ino = find_free_ino_bit(fsid);
+                return ino;
+            }
         }
 
         /*
@@ -496,18 +519,51 @@ namespace REDFS_ClusterMode
             }
             long fileoffset = m_ino * OPS.WIP_SIZE;
 
+            byte[] buffer = new byte[OPS.WIP_SIZE];
             lock (inowip)
             {
-                byte[] buffer = new byte[OPS.WIP_SIZE];
-                redfs_read(inowip, fileoffset, buffer, 0, OPS.WIP_SIZE);
-                mywip.parse_bytes(buffer);
-                if (oldtype != WIP_TYPE.UNDEFINED)
-                    mywip.set_wiptype(oldtype);
+                lock (mywip)
+                {
+                    redfs_read(inowip, fileoffset, buffer, 0, OPS.WIP_SIZE);
+                    mywip.parse_bytes(buffer);
+
+                    DEFS.ASSERT(!Array.TrueForAll(buffer, b => (b == 0)), "We have read 0'd data for wip, this cannot happen for a valid inode number");
+                    DEFS.ASSERT(mywip.isWipValid, "wip should be marked valid after checkout!");
+
+                    if (oldtype != WIP_TYPE.UNDEFINED)
+                        mywip.set_wiptype(oldtype);
+                }
             }
 
             //Now lets mark it clean, since we havent actually modified any info
             mywip.is_dirty = false;
+            mywip.update_fingerprint();
+
+            int fsid = inowip.get_filefsid();
+            if (wip_checkin_fps[fsid][m_ino] != null) {
+                string incore = (string)wip_checkin_fps[inowip.get_filefsid()][m_ino];
+                DEFS.ASSERT(mywip.fingerprint == incore, "wip has been corrupted while reading and it does not match the exisitng incore fingerprint");
+            }
+            DEFS.ASSERT(mywip.get_ino() == m_ino, "Ino should match on checkout!");
             return mywip.verify_inode_number();
+        }
+
+        public bool redfs_punch_wip_hole(RedFS_Inode inowip, RedFS_Inode mywip, int m_ino)
+        {
+            long fileoffset = m_ino * OPS.WIP_SIZE;
+            lock (inowip)
+            {
+                lock (mywip)
+                {
+                    byte[] zeroBuffer = new byte[OPS.WIP_SIZE];
+                    Array.Clear(zeroBuffer, 0, OPS.WIP_SIZE);
+
+                    redfs_write(inowip, fileoffset, zeroBuffer, 0, OPS.WIP_SIZE, WRITE_TYPE.OVERWRITE_IN_PLACE);
+                    inowip.is_dirty = true;
+                    wip_checkin_fps[inowip.get_filefsid()][m_ino] = "0";
+                }
+            }
+            return true;
         }
 
         public bool redfs_checkin_wip(RedFS_Inode inowip, RedFS_Inode mywip, int m_ino)
@@ -515,9 +571,17 @@ namespace REDFS_ClusterMode
             long fileoffset = m_ino * OPS.WIP_SIZE;
             lock (inowip)
             {
-                redfs_write(inowip, fileoffset, mywip.data, 0, OPS.WIP_SIZE, WRITE_TYPE.OVERWRITE_IN_PLACE);
-                mywip.is_dirty = false;
-                inowip.is_dirty = true;
+                lock (mywip)
+                {
+                    DEFS.ASSERT(mywip.isWipValid, "wip must be valid during checkin");
+                    mywip.update_fingerprint();
+                    redfs_write(inowip, fileoffset, mywip.data, 0, OPS.WIP_SIZE, WRITE_TYPE.OVERWRITE_IN_PLACE);
+                    mywip.is_dirty = false;
+                    inowip.is_dirty = true;
+                    DEFS.ASSERT(!Array.TrueForAll(mywip.data, b => (b == 255)), "We have read FF'd data for wip, this cannot happen for a valid inode number 322");
+                    DEFS.ASSERT(!Array.TrueForAll(mywip.data, b => (b == 0)), "We have read 0'd data for wip, this cannot happen for a valid inode number 322");
+                    wip_checkin_fps[inowip.get_filefsid()][m_ino] = mywip.fingerprint;
+                }
             }
             return mywip.verify_inode_number();
         }
@@ -755,6 +819,8 @@ namespace REDFS_ClusterMode
 
             int numDeallocsCalled = 0;
 
+            wip._lasthitbuf = null; //we are removing so mark this null
+
             if (wip.get_inode_level() == 0)
             {
                 for (int i = 0; i < OPS.NUML0(wip.get_filesize()); i++)
@@ -832,8 +898,6 @@ namespace REDFS_ClusterMode
                     numDeallocsCalled++;
                 }
             }
-
-            Console.WriteLine("numDeallocsCalled = " + numDeallocsCalled);
             return numDeallocsCalled;
         }
 
@@ -844,52 +908,62 @@ namespace REDFS_ClusterMode
          */
         public void redfs_resize_wip(int fsid, RedFS_Inode wip, long newsize, bool preAlloc)
         {
-            if (wip.get_filesize() <= newsize)
+            lock (wip)
             {
-                bool dummy6 = ((newsize - wip.get_filesize()) > 256 * 1024) ? true : false;
-                bool quickgrow = (wip.get_filesize() == 0) ? true : false;
-                if (dummy6 && quickgrow && !preAlloc)
+                if (wip.get_filesize() <= newsize)
                 {
-                    redfs_grow_wip_internal_superfast2(wip, newsize, fsid == 0);
-                }
-                else
-                {
-                    if (wip.m_ino == 0 || wip.m_ino == 1)
+                    bool dummy6 = ((newsize - wip.get_filesize()) > 256 * 1024) ? true : false;
+                    bool quickgrow = (wip.get_filesize() == 0) ? true : false;
+                    if (dummy6 && quickgrow && !preAlloc)
                     {
                         redfs_grow_wip_internal_superfast2(wip, newsize, fsid == 0);
                     }
                     else
                     {
-                        redfs_grow_wip_internal(fsid, wip, newsize, dummy6); //usually make dummy .xxx tofix 
+                        if (wip.m_ino == 0 || wip.m_ino == 1)
+                        {
+                            redfs_grow_wip_internal_superfast2(wip, newsize, fsid == 0);
+                        }
+                        else
+                        {
+                            redfs_grow_wip_internal(fsid, wip, newsize, dummy6); //usually make dummy .xxx tofix 
+                        }
                     }
+
+                    wip._lasthitbuf = null; //we are growing wip so mark this null
+
                 }
+                else
+                {
+                    throw new SystemException("Not yet implimented!");
+                    redfs_shrink_wip_internal(wip.get_filefsid(), wip, newsize);
+                }
+
+                //XXX todo : Dont have to write out just allocated L0 since they will be overwritten anyway.
+                //Try to write out L1 & L2s instead
+                if (newsize > 0)
+                {
+                    //sync(wip);
+                    //flush_cache(wip, true);
+                }
+                DEFS.ASSERT(wip.get_filesize() == newsize, "File size should match after resize");
             }
-            else
-            {
-                throw new SystemException("Not yet implimented!");
-                redfs_shrink_wip_internal(wip.get_filefsid(), wip, newsize);
-            }
-            
-            //XXX todo : Dont have to write out just allocated L0 since they will be overwritten anyway.
-            //Try to write out L1 & L2s instead
-            sync(wip);
-            flush_cache(wip, true);
-            DEFS.ASSERT(wip.get_filesize() == newsize, "File size should match after resize");
         }
 
         //
         // Setting the reserve flag will increment refcount. otherwise it must be for
         // resize type calls where the new inode is generally discarded.
         // 
-        public void redfs_create_wip_from_dbnlist(RedFS_Inode wip, long[] dbnlist, bool doreserve)
+        private void redfs_create_wip_from_dbnlist(RedFS_Inode wip, long[] dbnlist, bool doreserve)
         {
             DEFS.ASSERT(doreserve == false, "Not implimented yet");
+            wip._lasthitbuf = null;
+
             if (wip.get_inode_level() == 0)
             {
-                int c = 0;
                 for (int i = 0; i < dbnlist.Length; i++)
                 {
-                    wip.set_child_dbn(i, dbnlist[c++]);
+                    wip.set_child_dbn(i, dbnlist[i]);
                 }
             }
             else
@@ -902,7 +976,7 @@ namespace REDFS_ClusterMode
                 {
                     RedBufL1 wbl1 = (RedBufL1)redfs_allocate_buffer(wip, BLK_TYPE.REGULAR_FILE_L1, i * OPS.FS_SPAN_OUT, true, Array.Empty<long>(), 0);
                     wip.set_child_dbn(i, wbl1.m_dbn);
-                    int itr = 0;
+                    int itr = 0, numL0EntriesInL1 = 0, startPoint = counter;
 
                     while (counter < dbnlist.Length && itr < OPS.FS_SPAN_OUT)
                     {
@@ -910,6 +984,12 @@ namespace REDFS_ClusterMode
                         redfsBlockAllocator.mod_refcount(wip.get_filefsid(), dbnlist[counter], REFCNT_OP.INCREMENT_REFCOUNT_ALLOC, null, false);
                         counter++;
                         itr++;
+                        numL0EntriesInL1++;
+                    }
+
+                    for (int inner =0; inner < numL0EntriesInL1; inner++)
+                    {
+                       DEFS.ASSERT( wbl1.get_child_dbn(inner) == dbnlist[startPoint + inner], "FAiled to create a new wip from dbn list correctly");
                     }
                 }
             }
@@ -930,16 +1010,18 @@ namespace REDFS_ClusterMode
                 }
                 mFreeBufCache.deallocateList(wip.L0list, "discardWip(L0):" + wip.get_ino());
             }
+            wip._lasthitbuf = null;
         }
 
         // Generally external interface to delete a wip. the caller must ensure
         // that wip->size is set to zero with no pointers and this must be written
         // into the inofile.
 
-        public void redfs_delete_wip(int fsid, RedFS_Inode wip, bool clearincorebufs)
+        public void redfs_delete_wip(int fsid, RedFS_Inode inowip, RedFS_Inode wip, bool clearincorebufs)
         {
             RedFS_Inode wip4delq = new RedFS_Inode(wip.get_wiptype(), wip.get_ino(), 0);
 
+            wip._lasthitbuf = null;
             for (int i = 0; i < OPS.WIP_SIZE; i++)
             {
                 wip4delq.data[i] = wip.data[i];
@@ -982,6 +1064,12 @@ namespace REDFS_ClusterMode
             wip4delq.setfilefsid_on_dirty(fsid); //this must be set or else the counters go wrong.
             
             GLOBALQ.m_wipdelete_queue.Add(wip4delq);
+
+            if (inowip != null)
+            {
+                redfs_punch_wip_hole(inowip, wip, wip.get_ino());
+            }
+
             /*
             for (int i = 0; i < OPS.NUM_PTRS_IN_WIP; i++) { wip.set_child_dbn(i, DBN.INVALID); }
             wip.is_dirty = false;
@@ -990,7 +1078,7 @@ namespace REDFS_ClusterMode
             */
         }
 
-        public int redfs_get_file_dbns(RedFS_Inode wip, long[] dbns, int startfbn, int count)
+        private int redfs_get_file_dbns(RedFS_Inode wip, long[] dbns, int startfbn, int count)
         {
             DEFS.ASSERT(dbns.Length == count, "Please pass correct sizes");
             if (wip.get_inode_level() == 0)
@@ -1034,7 +1122,10 @@ namespace REDFS_ClusterMode
 
         public RedFS_Inode redfs_clone_wip(RedFS_Inode wip)
         {
-            return redfs_clone_file_wip(wip);
+            lock (wip)
+            {
+                return redfs_clone_file_wip(wip);
+            }
         }
 
         /**************************************************  Private methods *************************************/
@@ -1095,6 +1186,7 @@ namespace REDFS_ClusterMode
                 }
             }
             dupwip.is_dirty = true;
+            dupwip.isWipValid = true;
             dupwip.set_filesize(wip.get_filesize());
 
             return dupwip;
@@ -1109,7 +1201,7 @@ namespace REDFS_ClusterMode
         {
             if (newsize == 0)
             {
-                redfs_delete_wip(callingfsid, wip, true);
+                redfs_delete_wip(callingfsid, null, wip, true);
                 wip.set_filesize(0);
                 return;
             }
@@ -1126,17 +1218,23 @@ namespace REDFS_ClusterMode
             newwip.set_filesize(newsize);
             sync(newwip);
 
-            redfs_delete_wip(callingfsid, wip, true);
-
+            redfs_delete_wip(callingfsid, null, wip, true);
+            
+            //now update what the ccaller passed
             for (int i = 0; i < OPS.NUM_WIPS_IN_BLOCK; i++)
             {
                 wip.data[i] = newwip.data[i];
             }
+            
             wip.is_dirty = true;
+            //wip.fbn_wise_fps.Clear();
+            //wip.fingerprint = "";
+            //wip.logs.Clear();
+            
             DEFS.ASSERT(wip.get_filesize() == newsize, "could not shrink wip 2");
         }
 
-        public bool HasChildIncoreOld(RedFS_Inode wip, int level, long sfbn)
+        private bool HasChildIncoreOld(RedFS_Inode wip, int level, long sfbn)
         {
             DEFS.ASSERT(level > 0, "Incorrect level to HasChildIncore()");
             if (level == 1)
@@ -1176,6 +1274,8 @@ namespace REDFS_ClusterMode
             RedBufL1 wbl1 = (RedBufL1)redfs_load_buf(wip, 1, fbn, false);
             int idx = OPS.myidx_in_myparent(0, fbn);
             long dbn0 = wbl1.get_child_dbn(idx);
+
+            DEFS.ASSERT(dbn0 != DBN.INVALID, "cannot have invalid dbn during fast read");
 
             ReadPlanElement rpe = redfsBlockAllocator.PrepareReadPlanSingle(dbn0);
             redFSPersistantStorage.ExecuteReadPlanSingle(rpe, buffer, offset, OPS.FS_BLOCK_SIZE);
@@ -1234,6 +1334,7 @@ namespace REDFS_ClusterMode
             WritePlanElement wpe = redfsBlockAllocator.PrepareWritePlanSingle(dbn0);
             redFSPersistantStorage.ExecuteWritePlanSingle(wpe, buffer, offset);
 
+            wip.log("Fast Write " + dbn0 + "(buffer size,offset =" + buffer.Length + "," + offset + ")");
 
             REDFSCoreSideMetrics.m.StopMetric(METRIC_NAME.FASTWRITE_LATENCY_MS, offset);
         }
@@ -1266,6 +1367,8 @@ namespace REDFS_ClusterMode
         {
             bool reassigndone = false;
             long start_fbn = (wbl0 == null) ? givenfbn : (int)wbl0.m_start_fbn;
+
+            wip._lasthitbuf = null; //most likely this will need to be updated
 
             if (wip.get_inode_level() == 0)
             {
@@ -1305,6 +1408,7 @@ namespace REDFS_ClusterMode
             {
                 RedBufL1 wbl1 = (RedBufL1)get_buf3("RE-DBN", wip, 1, (int)start_fbn, false);
                 RedBufL2 wbl2 = (RedBufL2)get_buf3("RE-DBN", wip, 2, (int)start_fbn, false);
+
                 if (wbl2.needdbnreassignment)
                 {
                     redfs_reassign_new_dbn(wip, wbl2);
@@ -1325,12 +1429,19 @@ namespace REDFS_ClusterMode
                 }
                 if (wbl0 != null && wbl0.needdbnreassignment)
                 {
+                    long old_dbn = wbl0.m_dbn;
                     redfs_reassign_new_dbn(wip, wbl0);
                     int pidx = wbl0.myidx_in_myparent();
                     wbl1.set_child_dbn(pidx, wbl0.m_dbn);
                     wbl1.is_dirty = true;
                     reassigndone = true;
                     wbl0.needdbnreassignment = false;
+                    long new_dbn = wbl0.m_dbn;
+
+                    if (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE)
+                    {
+                        wip.log("L0 " + wbl0.m_start_fbn + "  dbn: " + old_dbn + " ->" + new_dbn);
+                    }
                 }
             }
             else
@@ -1341,20 +1452,38 @@ namespace REDFS_ClusterMode
             {
                 //DEFS.DEBUG("DBN-R", "redfs_allocate_new_dbntree, wip = " + wip.m_ino + " sfbn = " + wbl0.m_start_fbn);
                 //redfs_show_vvbns(wip, false);
+                wip.dbnTreeReassignmentCount++;
             }
         }
 
+        /*
+         * Called from redfs_read or redfs_write and with lock on wip
+         */ 
         private int do_io_internal(REDFS_OP type, RedFS_Inode wip, long fileoffset, byte[] buffer, int boffset, int blength)
         {
             DEFS.ASSERT(blength <= buffer.Length && ((buffer.Length - boffset) >= blength),
                                     "Overflow detected in do_io_internal type = " + type);
 
-            if (wip.get_filesize() < (fileoffset + blength))
+            if ((wip.get_filesize() < (fileoffset + blength)))
             {
-                //DEFS.ASSERT(wip.get_ino() == 0 || type == REDFS_OP.REDFS_WRITE, "Cannot grow wip for " +
-                //        "read operations, except for inofile. wip.ino = " + wip.get_ino() + " and type = " + type + " and size " +
-                //        wip.get_filesize() + " to " + (fileoffset + blength));
-                redfs_resize_wip(wip.get_filefsid(), wip, (fileoffset + blength), false);
+                if (type == REDFS_OP.REDFS_WRITE)
+                {
+                    //DEFS.ASSERT(wip.get_ino() == 0 || type == REDFS_OP.REDFS_WRITE, "Cannot grow wip for " +
+                    //        "read operations, except for inofile. wip.ino = " + wip.get_ino() + " and type = " + type + " and size " +
+                    //        wip.get_filesize() + " to " + (fileoffset + blength));
+                    redfs_resize_wip(wip.get_filefsid(), wip, (fileoffset + blength), false);
+                }
+                else
+                {
+                    long eof_read_boundary = fileoffset + blength;
+                    if ((eof_read_boundary - wip.get_filesize()) > 0) //not sure why 4k page is assumed
+                    {
+                        //Let caller figure out we are not going to give data beyond eof
+                        DEFS.DEBUG_GREEN("Trying to read beyond eof : wip " + wip.get_ino() + " actual: " + wip.get_filesize() + " versus " + eof_read_boundary);
+                        blength = (int)(wip.get_filesize() - fileoffset);
+                    }
+                }
+                wip.iohistory = 0;
             }
 
             int buffer_start = boffset;
@@ -1370,16 +1499,20 @@ namespace REDFS_ClusterMode
                 long fbn = OPS.OffsetToFBN(fileoffset);
 
                 bool fullwrite = (copylength == OPS.FS_BLOCK_SIZE && type == REDFS_OP.REDFS_WRITE &&
-                        wip.get_wiptype() != WIP_TYPE.PUBLIC_INODE_FILE) ? true : false;
+                        (wip.get_wiptype() != WIP_TYPE.PUBLIC_INODE_FILE )) ? true : false;
                 bool fullread = (copylength == OPS.FS_BLOCK_SIZE && type == REDFS_OP.REDFS_READ &&
                         wip.get_wiptype() != WIP_TYPE.PUBLIC_INODE_FILE) ? true : false;
 
                 if (fullwrite && wip.get_inode_level() > 0 &&
-                            (wip.iohistory == 0xFFFFFFFFFFFFFFFF) && //stop caching writes and go fast after 64 blocks.
-                            (wip.get_wiptype() != WIP_TYPE.PUBLIC_INODE_FILE) &&
+                            (wip.iohistory == 0xFFFFFFFFFFFFFFFF || (wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE)) && //stop caching writes and go fast after 64 blocks.
                             (get_buf3("TEST", wip, 0, fbn, true) == null))
                 {
                     do_fast_write(wip, fbn, buffer, buffer_start);
+
+                    RedBufL1 wbl1_t = (RedBufL1)get_buf3("TEST", wip, 1, fbn, true);
+                    DEFS.ASSERT(wbl1_t != null, "We just did fast write, so shouldnt be null");
+                    DEFS.ASSERT(wbl1_t.get_child_dbn(OPS.myidx_in_myparent(0, fbn)) > 0, "dbn should have been updated in l1 in fast write");
+
                     buffer_start += copylength;
                     wboffset += copylength;
                     fileoffset += copylength;
@@ -1399,34 +1532,92 @@ namespace REDFS_ClusterMode
 
                 DEFS.ASSERT(OPS.NUML0(wip.get_filesize()) > fbn, "we cannot load buf beyond eof!");
 
-                RedBufL0 wbl0 = (RedBufL0)redfs_load_buf(wip, 0, fbn, type == REDFS_OP.REDFS_WRITE);
+                bool loadBufFlag = (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE) ? false : (type == REDFS_OP.REDFS_WRITE);
+                RedBufL0 wbl0 = (RedBufL0)redfs_load_buf(wip, 0, fbn, loadBufFlag);
 
-                DEFS.ASSERT(wbl0.m_dbn < 10000000, "Just for testing!");
+                /*
+                 * After load buf we should have all the wip->L2 (optional)->L1 (optional)->L0 in memory.
+                 * XXX add the check here. TODO
+                 */ 
+
+                if (type == REDFS_OP.REDFS_READ)
+                {
+                    //Lets verify if the block hash matchs if we had writtin out inthis sessions.
+                    if (wip.fbn_wise_fps.Contains(fbn))
+                    {
+                        wbl0.update_fingerprint();
+                        DEFS.ASSERT((string)wip.fbn_wise_fps[fbn] == (wbl0.fingerprint + " @ " + wbl0.m_dbn), "Fingerprints for inofile fbns should match after write and then read!");
+                    }
+                }
 
                 if (type == REDFS_OP.REDFS_WRITE)
                 {
-                    Array.Copy(buffer, buffer_start, wbl0.data, wboffset, copylength);
+                    byte[] original = new byte[OPS.FS_BLOCK_SIZE];
+                    if (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE)
+                    {
+                        DEFS.ASSERT(copylength == OPS.WIP_SIZE, "write should be 256 bytes for inode file");
+                        Array.Copy(wbl0.data, original, OPS.FS_BLOCK_SIZE);
+                    }
+
+                    Array.Copy(buffer, buffer_start, wbl0.data, wboffset, copylength); 
                     buffer_start += copylength;
                     wboffset += copylength;
                     wbl0.is_dirty = true;
-                    wbl0.mTimeToLive = 1;
+                    wbl0.update_fingerprint();
+
+                    //XXX fast overwrites with low ttl for inode file is creating problems when writing out large amount of data
+                    //so keep the L0s more in memory for a longer time.
+                    wbl0.mTimeToLive = (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE)? 20 : 2;
+
                     redfs_allocate_new_dbntree(wip, wbl0, -1);
+
+
+                    if (wip.get_inode_level() > 0)
+                    {
+                        RedBufL1 wbl1_t = (RedBufL1)get_buf3("testing", wip, 1, wbl0.m_start_fbn, true);
+                        int idx_t = wbl0.myidx_in_myparent();
+                        DEFS.ASSERT(wbl1_t.get_child_dbn(idx_t) == wbl0.m_dbn, "Dbn in L1 and L0 should correspond after allocate_new_dbn_tree, " + wbl1_t.get_child_dbn(idx_t) + " vs " + wbl0.m_dbn);
+
+                        //Additional check, if its directory, verify that all dbns in the L1 till now are valid and fine
+                        if (wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE)
+                        {
+                            for (int id_t = 0; id_t < idx_t; id_t++)
+                            {
+                                DEFS.ASSERT(wbl1_t.get_child_dbn(id_t) > 0, "For dir file, all buffs till now should be valid and marked in wb_L1");
+                            }
+                        }
+                    }
                     wip.iohistory = (wip.iohistory << 1) | 0x0000000000000001;
+
+                    if (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE)
+                    {
+                        byte[] final = new byte[OPS.FS_BLOCK_SIZE];
+                        Array.Copy(wbl0.data, final, OPS.FS_BLOCK_SIZE);
+
+                        int diffbytes = 0; 
+                        for (int i=0; i<OPS.FS_BLOCK_SIZE;i++)
+                        {
+                            if (original[i] != final[i]) diffbytes++;
+                        }
+                        DEFS.ASSERT(diffbytes <= OPS.WIP_SIZE, "the write should've been only 256 bytes");
+                    }
                 }
                 else
                 {
                     Array.Copy(wbl0.data, wboffset, buffer, buffer_start, copylength);
                     buffer_start += copylength;
                     wboffset += copylength;
-                    wbl0.mTimeToLive += (wbl0.mTimeToLive < 4) ? 1 : 0;
+                    //wbl0.mTimeToLive += (wbl0.mTimeToLive < 4) ? 1 : 0;
+                    wbl0.mTimeToLive = (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE) ? 10 : 2;
                     wip.iohistory = (wip.iohistory << 1);
                 }
+
                 DEFS.ASSERT(wboffset <= OPS.FS_BLOCK_SIZE && buffer_start <= (boffset + blength), "Incorrect computation in redfs_io " + type);
                 fileoffset += copylength;
             }
 
 
-            if (type == REDFS_OP.REDFS_WRITE && wip.get_incore_cnt() > 1024)
+            if (type == REDFS_OP.REDFS_WRITE && wip.get_incore_cnt() > 1024 && wip.get_wiptype() != WIP_TYPE.PUBLIC_INODE_FILE)
             {
                 sync(wip);
                 flush_cache(wip, false);
@@ -1435,7 +1626,8 @@ namespace REDFS_ClusterMode
             {
                 // DEFS.DEBUG("WOPINOFILE", type + "(ino, fileoffset, length) = (" + wip.m_ino + "," + fileoffset + "," + blength + ")");
                 //This sync also gave me lots of fucking problems. so be careful to commit inowip regularly
-                //sync(wip);
+                //enabled on nov19, just to test.
+                sync(wip);
             }
 
             return blength;
@@ -1444,25 +1636,37 @@ namespace REDFS_ClusterMode
 
         public int redfs_write(RedFS_Inode wip, long fileoffset, byte[] buffer, int boffset, int blength, WRITE_TYPE type)
         {
-            if (type == WRITE_TYPE.OVERWRITE_IN_PLACE)
+            lock (wip)
             {
-                return do_io_internal(REDFS_OP.REDFS_WRITE, wip, fileoffset, buffer, boffset, blength);
-            }
-            else if (type == WRITE_TYPE.TRUNCATE_AND_OVERWRITE)
-            {
-                redfs_shrink_wip_internal(wip.get_filefsid(), wip, 0);
-                return do_io_internal(REDFS_OP.REDFS_WRITE, wip, fileoffset, buffer, boffset, blength);
-            }
-            else
-            {
-                DEFS.ASSERT(false, "Unknown type passed, cannot handle it.");
-                return -1;
+                if (type == WRITE_TYPE.OVERWRITE_IN_PLACE)
+                {
+                    return do_io_internal(REDFS_OP.REDFS_WRITE, wip, fileoffset, buffer, boffset, blength);
+                }
+                else if (type == WRITE_TYPE.TRUNCATE_AND_OVERWRITE)
+                {
+                    DEFS.ASSERT(wip.get_wiptype() != WIP_TYPE.PUBLIC_INODE_FILE &&
+                        wip.get_wiptype() != WIP_TYPE.PUBLIC_INODE_MAP, "We cannot truncate and write inode or imap file");
+                    redfs_shrink_wip_internal(wip.get_filefsid(), wip, 0);
+                    DEFS.ASSERT(wip.get_filesize() == 0, "File should be truncated by now!");
+                    int returnvalue = do_io_internal(REDFS_OP.REDFS_WRITE, wip, fileoffset, buffer, boffset, blength);
+
+                    //Verify
+                    return returnvalue;
+                }
+                else
+                {
+                    DEFS.ASSERT(false, "Unknown type passed, cannot handle it.");
+                    return -1;
+                }
             }
         }
 
         public int redfs_read(RedFS_Inode wip, long fileoffset, byte[] buffer, int boffset, int blength)
         {
-            return do_io_internal(REDFS_OP.REDFS_READ, wip, fileoffset, buffer, boffset, blength);
+            lock (wip)
+            {
+                return do_io_internal(REDFS_OP.REDFS_READ, wip, fileoffset, buffer, boffset, blength);
+            }
         }
 
         public void redfs_do_raw_read_block(long dbn, byte[] buffer, int offset)
@@ -1480,18 +1684,12 @@ namespace REDFS_ClusterMode
 
         public void redfs_do_raw_write_block(long dbn, byte[] buffer, int offset)
         {
-
             WritePlanElement wpe = redfsBlockAllocator.PrepareWritePlanSingle(dbn);
             redFSPersistantStorage.ExecuteWritePlanSingle(wpe, buffer, offset);
-
         }
 
         public void sync(RedFS_Inode wip)
         {
-            if (wip.m_ino == 0)
-            {
-                Console.WriteLine("Just to capture this execution point in debug");
-            }
             //
             // First clean all the L0's, when cleaning, note that the entries in the L1 are matching!
             // Repeat the same for all the levels starting from down onwards.
@@ -1499,7 +1697,6 @@ namespace REDFS_ClusterMode
             lock (wip)
             {
                 wip.sort_buflists();
-                wip._lasthitbuf = null;
 
                 for (int i = 0; i < wip.L0list.Count; i++)
                 {
@@ -1524,9 +1721,15 @@ namespace REDFS_ClusterMode
                     {
                         WritePlanElement wpe = redfsBlockAllocator.PrepareWritePlanSingle(wbl0.m_dbn);
                         redFSPersistantStorage.ExecuteWritePlanSingle(wpe, wip, wbl0);
+                        //if (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE)
+                        //{
+                            wbl0.update_fingerprint();
+                            wip.fbn_wise_fps[wbl0.m_start_fbn] = wbl0.fingerprint + " @ " + wbl0.m_dbn;
+                        //}
+
                     }
 
-                    if (wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE || wbl0.isTimetoClear())
+                    if (/*wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE || */ wbl0.isTimetoClear())
                     {
                         wip.L0list.RemoveAt(i);
                         mFreeBufCache.deallocate4(wbl0, "dirL0/TTL Over :" + wip.get_ino());
@@ -1564,7 +1767,7 @@ namespace REDFS_ClusterMode
                         WritePlanElement wpe = redfsBlockAllocator.PrepareWritePlanSingle(wbl1.m_dbn);
                         redFSPersistantStorage.ExecuteWritePlanSingle(wpe, wip, wbl1);
                     }
-                    if (wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE ||
+                    if (/*wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE ||*/
                                 (wbl1.isTimetoClear() && !HasChildIncoreOld(wip, 1, wbl1.m_start_fbn)))
                     {
 
@@ -1595,7 +1798,7 @@ namespace REDFS_ClusterMode
                         WritePlanElement wpe = redfsBlockAllocator.PrepareWritePlanSingle(wbl2.m_dbn);
                         redFSPersistantStorage.ExecuteWritePlanSingle(wpe, wip, wbl2);
                     }
-                    if (wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE ||
+                    if (/*wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE ||*/
                         (wbl2.isTimetoClear() && !HasChildIncoreOld(wip, 2, wbl2.m_start_fbn)))
                     {
                         wip.L2list.RemoveAt(i);
@@ -1676,7 +1879,7 @@ namespace REDFS_ClusterMode
          * is query is set true, then the caller is not sure if the buf is incore, in that
          * case we can return null safely.
          */
-        public static Red_Buffer get_buf3(string who, RedFS_Inode wip, int level, long some_fbn, bool isquery)
+        private static Red_Buffer get_buf3(string who, RedFS_Inode wip, int level, long some_fbn, bool isquery)
         {
             List<Red_Buffer> list = null;
 
@@ -1709,7 +1912,18 @@ namespace REDFS_ClusterMode
                 Red_Buffer wb = (Red_Buffer)list[idx2];
                 if (wb.get_start_fbn() == start_fbn)
                 {
-                    if (level == 1) wip._lasthitbuf = wb;
+                    if (level == 1)
+                    {
+                        wip._lasthitbuf = wb;
+                    }
+                    else if (level == 0)
+                    {
+                        //we expect the :1 of this to be present in memory, but not updated correctly when dirty
+                        //RedBufL1 wbl1 = (RedBufL1)get_buf3(who, wip, 1, start_fbn, isquery);
+                        //int idx_t = ((RedBufL0)wb).myidx_in_myparent();
+                        //DEFS.ASSERT(wbl1.get_child_dbn(idx_t) == wb.get_start_fbn(), "L1 should have the dbn of L0 correctly!");
+                    }
+
                     return wb;
                 }
             }
@@ -2091,8 +2305,9 @@ namespace REDFS_ClusterMode
                         DEFS.ASSERT(wbl0.needtouchbuf, "This cannot be cleared out! 6");
                         DEFS.ASSERT(wip.get_ino() == 0, "ino for inodefile");
                         redfsBlockAllocator.touch_refcount(wip.get_filefsid(), wip.get_ino(), wbl0, true);
+                        DEFS.ASSERT(false, "for inode wip, the wip level cannot be zero!");
                     }
-                    //wip.L0list.Add(wbl0);
+
                     wip.insert_buffer(mFreeBufCache, 0, wbl0);
 
                     return wbl0;
@@ -2104,11 +2319,16 @@ namespace REDFS_ClusterMode
                     int idx = (int)(someL0fbn % OPS.FS_SPAN_OUT);
                     long dbn0 = wbl1.get_child_dbn( idx);
 
-                    DEFS.ASSERT(dbn0 != DBN.INVALID, "Invalid dbn found in a valid portion 5, fsize = " +
-                        wip.get_filesize() + " wbl1.sfbn = " + wbl1.m_start_fbn + " somel0fbn = " + someL0fbn);
+                    if (!forwrite)
+                    {
+                        DEFS.ASSERT(dbn0 != DBN.INVALID, "Invalid dbn found in a valid portion 5, fsize = " +
+                            wip.get_filesize() + " wbl1.sfbn = " + wbl1.m_start_fbn + " somel0fbn = " + someL0fbn);
+                    }
 
-                    RedBufL0 wbl0 = (RedBufL0)redfs_allocate_buffer(wip, BLK_TYPE.REGULAR_FILE_L0, someL0fbn, true, Array.Empty<long>(), 0);
+                    RedBufL0 wbl0 = (RedBufL0)redfs_allocate_buffer(wip, BLK_TYPE.REGULAR_FILE_L0, someL0fbn, true, Array.Empty<long>(), 0); ;
+
                     wbl0.m_dbn = dbn0;
+
                     //XXX verify workflow.
                     if (forwrite == false && wbl0.m_dbn != 0)
                     {

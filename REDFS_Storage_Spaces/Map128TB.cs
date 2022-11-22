@@ -139,10 +139,13 @@ namespace REDFS_ClusterMode
         {
             while(!mTerminateThread)
             {
-                Thread.Sleep(100);
+                int count = GLOBALQ.m_deletelog2.Count;
+                if (count < 1000)
+                {
+                    Thread.Sleep(10);
+                }
                 lock (GLOBALQ.m_deletelog2)
                 {
-                    int count = GLOBALQ.m_deletelog2.Count;
                     if (count > 1000) count = 1000;
 
                     try

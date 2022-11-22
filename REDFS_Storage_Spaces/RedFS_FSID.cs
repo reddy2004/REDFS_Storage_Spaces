@@ -52,7 +52,6 @@ namespace REDFS_ClusterMode
                 _ninowip.setfilefsid_on_dirty( get_fsid() );
             }
 
-            Console.WriteLine("Giving a inowip to " + requester);
             return _ninowip;
         }
 

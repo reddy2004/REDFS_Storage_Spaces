@@ -150,7 +150,7 @@ namespace REDFS_ClusterMode
 
             GLOBALQ.WRObj[rbn].incoretbuf.is_dirty = false;
         }
-
+         
         /*
          * Called when 'memory' pressure is detected, or periodically
          * to sync the modified values the disk & free up slots.
@@ -161,26 +161,79 @@ namespace REDFS_ClusterMode
             bool mempressureflag = false;
             int mempressurecounter = 0;
 
-            Array.Sort(refcache, 0, cachesize, new wrcomparator());
+            //Sorting has issues since while sorting the timings are being updated in parallel
+            //causing the sorter to get confused
+            //XXXX
+            //System.ArgumentException: 'Unable to sort because the IComparer.Compare() method returns inconsistent results. Either a value does not compare equal to itself, or one value repeatedly compared to another value yields different results. IComparer: 'REDFS_ClusterMode.wrcomparator'.'
 
-            if (cachesize > 8192)
+            lock (refcache)
             {
-                mempressureflag = true;
-                mempressurecounter = cachesize - 8192; // how many to remove.
-            }
-
-            for (int i = 0; i < cachesize; i++)
-            {
-                if (refcache[i].is_dirty)
+                RefObjSorterPlaceholder[] refcacheplaceholder = new RefObjSorterPlaceholder[cachesize];
+                for (int i=0;i< cachesize; i++)
                 {
-                    sync_buf(refcache[i].m_rbn);
+                    refcacheplaceholder[i] = new RefObjSorterPlaceholder(i, refcache[i].get_buf_age());
                 }
 
-                if ((mempressureflag && (mempressurecounter-- >= 0)) ||
-                        refcache[i].get_buf_age() > 10000)
+                //showing the same issue.Let me do manual sort.
+                //Array.Sort(refcacheplaceholder, 0, cachesize, new wrcomparator_t());
+                for (int outer=0;outer<cachesize;outer++)
                 {
-                    if (free_incore_buf(refcache[i].m_rbn))
+                    long max_buf_age = 0;
+                    int idx = outer;
+                    //find the biggest buf_age from <outer, size> and move it to outer position
+                    for (int inner = outer; inner < cachesize; inner++)
                     {
+                        if (refcacheplaceholder[inner].buffer_age > max_buf_age)
+                        {
+                            max_buf_age = refcacheplaceholder[inner].buffer_age;
+                            idx = inner;
+                        }
+                        if (idx != outer)
+                        {
+                            RefObjSorterPlaceholder temp = refcacheplaceholder[idx];
+                            refcacheplaceholder[idx] = refcacheplaceholder[outer];
+                            refcacheplaceholder[outer] = temp;
+                        }
+                    }
+                }
+
+                WRBuf[] tempRefCache = new WRBuf[cachesize];
+
+                for (int i = 0; i < cachesize;i++)
+                {
+                    //the sorted has index of where it should be in sorted list
+                    int curr_pos = refcacheplaceholder[i].index;
+                    int final_pos = i;
+
+                    tempRefCache[final_pos] = refcache[curr_pos];
+                }
+
+                //tempRefCache is now sorted, new copy back
+                for (int i = 0; i < cachesize; i++)
+                {
+                    refcache[i] = tempRefCache[i];
+                }
+
+                //Array.Sort(refcache, 0, cachesize, new wrcomparator());
+
+                //Because of above issue, dont sort for now. parse through everything.
+                if (cachesize > 8192)
+                {
+                    mempressureflag = true;
+                    mempressurecounter = cachesize - 8192; // how many to remove.
+                }
+
+                for (int i = 0; i < cachesize; i++)
+                {
+                    if (refcache[i].is_dirty)
+                    {
+                        sync_buf(refcache[i].m_rbn);
+                    }
+
+                    if ((mempressureflag && (mempressurecounter-- >= 0)) ||
+                            refcache[i].get_buf_age() > 10000)
+                    {
+                        free_incore_buf(refcache[i].m_rbn);
                         refcache[i] = null;
                     }
                     else
@@ -188,15 +241,10 @@ namespace REDFS_ClusterMode
                         refcache[curr++] = refcache[i];
                     }
                 }
-                else
-                {
-                    refcache[curr++] = refcache[i];
-                }
+
+                DEFS.ASSERT(cachesize >= (curr), "memory leak detected");
+                cachesize = curr;
             }
-
-            DEFS.ASSERT(cachesize >= (curr), "memory leak detected");
-            cachesize = curr;
-
 
             /* 
              * Flush the ref count file 
@@ -216,14 +264,16 @@ namespace REDFS_ClusterMode
             }
             else
             {
-
                 WRBuf tbuf = allocate(rbn);
 
                 mfile1.Seek((long)rbn * OPS.REF_BLOCK_SIZE, SeekOrigin.Begin);
                 mfile1.Read(tbuf.data, 0, OPS.REF_BLOCK_SIZE);
 
-                GLOBALQ.WRObj[rbn].incoretbuf = tbuf;
-                refcache[cachesize++] = tbuf;
+                lock (refcache)
+                {
+                    GLOBALQ.WRObj[rbn].incoretbuf = tbuf;
+                    refcache[cachesize++] = tbuf;
+                }
             }
 
             DoSnapshotWork(rbn);
@@ -368,14 +418,13 @@ namespace REDFS_ClusterMode
             if (value == -1)
             {
                 if (GLOBALQ.WRObj[rbn].incoretbuf.get_refcount(dbn) == 0) blocksMarkedForFreeing2++;
-                if (0 == blocksMarkedForFreeing2 % 1024)
+                if (0 == blocksMarkedForFreeing2 % 8192)
                 {
                     Console.WriteLine("blocksMarkedForFreeing2 = " + blocksMarkedForFreeing2);
                 }
             }
             if (optype == REFCNT_OP.INCREMENT_REFCOUNT)
             {
-                Console.WriteLine("debug here!");
                 DEFS.ASSERT(curr > 0, "we cannot increment ref without having some value");
             }
 
@@ -418,22 +467,19 @@ namespace REDFS_ClusterMode
             //32 entries in inode block
             for (int i = 0; i < OPS.NUM_WIPS_IN_BLOCK; i++)
             {
+                wip.isWipValid = false;
                 for (int t = 0; t < OPS.WIP_SIZE; t++) buf[t] = buffer[i * OPS.WIP_SIZE + t];
                 wip.parse_bytes(buf);
 
+                if (!wip.isWipValid || wip.get_ino() < 2 || wip.get_filesize() >= 0)
+                {
+                    DEFS.DEBUG_RED("wip in tfbn is invalid, pass on !");
+                    continue;
+                }
                 BLK_TYPE type = BLK_TYPE.IGNORE;
                 int numidx = 0;
 
-                int inolevel = wip.get_inode_level();
-                int numl2 = wip.get_inode_level();
-                long size = wip.get_filesize();
-                int inon = wip.get_ino();
                 String wipstr = wip.ToString();
-
-                if (inon == 0)
-                {
-                    continue;
-                }
 
                 switch (wip.get_inode_level())
                 {
@@ -449,6 +495,12 @@ namespace REDFS_ClusterMode
                         type = BLK_TYPE.REGULAR_FILE_L2;
                         numidx = OPS.NUML2(wip.get_filesize());
                         break;
+                }
+
+                if (numidx > 16)
+                {
+                    DEFS.DEBUG_RED("wip in tfbn is invalid, pass on ! " + wipstr);
+                    continue;
                 }
                 for (int x = 0; x < numidx; x++)
                 {

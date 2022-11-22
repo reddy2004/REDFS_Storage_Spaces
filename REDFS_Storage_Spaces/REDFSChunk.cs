@@ -611,6 +611,8 @@ namespace REDFS_ClusterMode
 
         public long max_dbn; //overflows after this. so reset the search to 0 again.
 
+        public long totalPhysicalBlocksInFileSystem = 0;
+
         public DBNSegmentSpanMap(int numSpans)
         {
             startDBNToDBNSegmentSpan = new DBNSegmentSpan[numSpans];
@@ -653,7 +655,8 @@ namespace REDFS_ClusterMode
                     int numblks;
                     startDBNToDBNSegmentSpan[i].GetStartAndEndDBNForSpan(out sdbn, out edbn, out numblks);
                     max_dbn = edbn;
-                }
+                    totalPhysicalBlocksInFileSystem += numblks;
+    }
             }
             
             isSpanMapInited = true;
@@ -672,20 +675,25 @@ namespace REDFS_ClusterMode
 
             while (!mTerminateThread)
             {
-                Thread.Sleep(10);
+                int t_count = GLOBALQ.m_deletelog_spanmap.Count;
+                if (t_count < 1000)
+                {
+                    Thread.Sleep(10);
+                }
                 lock (GLOBALQ.m_deletelog_spanmap)
                 {
-                    int count = GLOBALQ.m_deletelog_spanmap.Count;
+                    int count = 0;
+                    if (t_count == 0) continue;
+                    if (t_count > 1000) count = 1000;
 
-                    if (count == 0) continue;
-                    if (count > 1000) count = 1000;
+                    REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.BLOCK_DRAIN, t_count);
 
                     try
                     {
                         for (int i = 0; i < count; i++)
                         {
                             long dbn = GLOBALQ.m_deletelog_spanmap.ElementAt(0);
-                            REDFSCoreSideMetrics.m.InsertMetric(METRIC_NAME.BLOCK_DRAIN, count);
+                            
 
                             GLOBALQ.m_deletelog_spanmap.RemoveAt(0);
 
@@ -721,7 +729,7 @@ namespace REDFS_ClusterMode
                                     startDBNToDBNSegmentSpan[start_at].totalFreeBlocks += 1;
                                     if (startDBNToDBNSegmentSpan[start_at].totalFreeBlocks > 131070)
                                     {
-                                        Console.WriteLine("Freeing " + dbn + " @ " + startDBNToDBNSegmentSpan[start_at].type + " FB: " + startDBNToDBNSegmentSpan[start_at].totalFreeBlocks);
+                                        //Console.WriteLine("Freeing " + dbn + " @ " + startDBNToDBNSegmentSpan[start_at].type + " FB: " + startDBNToDBNSegmentSpan[start_at].totalFreeBlocks);
                                     }
                                 }
                                 isDirty = true;
@@ -884,14 +892,18 @@ namespace REDFS_ClusterMode
         public long GetSpanWithSpecificTypesAndRequiredFreeBlocks(SPAN_TYPE type, long start_dbn, int numDbns)
         {
             //Lets start from the begining of the span
-            int start_at = DBNSegmentSpan.GetDBNSpaceSegmentOffset(start_dbn);
-            if (startDBNToDBNSegmentSpan[start_at].type == SPAN_TYPE.RAID5)
+            int start_at = DBNSegmentSpan.GetDBNSpaceSegmentOffset(start_dbn); ;
+            if ((start_dbn + numDbns > max_dbn))
             {
-                start_dbn -= (OPS.NUM_DBNS_IN_1GB * startDBNToDBNSegmentSpan[start_at].position);
+                start_at = 0;
             }
 
-            //So start here now.
-            start_at = DBNSegmentSpan.GetDBNSpaceSegmentOffset(start_dbn);
+            if (startDBNToDBNSegmentSpan[start_at].type == SPAN_TYPE.RAID5 && start_at > 0)
+            {
+                start_dbn -= (OPS.NUM_DBNS_IN_1GB * startDBNToDBNSegmentSpan[start_at].position);
+                start_at = DBNSegmentSpan.GetDBNSpaceSegmentOffset(start_dbn);
+            }
+
 
             for (int i = start_at; i < startDBNToDBNSegmentSpan.Length; i++)
             {
@@ -1034,6 +1046,8 @@ namespace REDFS_ClusterMode
                             dupSpan.totalFreeBlocks = OPS.NUM_DBNS_IN_1GB;
                             dupSpan.start_dbn = span.start_dbn + i * OPS.NUM_DBNS_IN_1GB;
                             startDBNToDBNSegmentSpan[startSeg + i] = dupSpan;
+
+                            totalPhysicalBlocksInFileSystem += OPS.NUM_DBNS_IN_1GB;
 
                             long sdbn, edbn;
                             int numblks;

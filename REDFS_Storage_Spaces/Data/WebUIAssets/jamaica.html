@@ -869,10 +869,15 @@
                                 <br> <br>
                             </div>
 
+                            <b> Inside DOKAN  Core </b> <br><br> 
                             <div id="chartContainerRW" style="height: 300px; width: 80%; margin: auto;"></div> <br>
                             <div id="chartContainerRefs" style="height: 300px; width: 80%; margin:  auto;"></div> <br>
                             <div id="chartContainerDirty" style="height: 300px; width: 80%; margin:  auto;"></div> <br>
                             <div id="chartContainerSpace" style="height: 300px; width: 80%; margin: auto;"></div> <br>
+
+
+                            <b> Inside REDFS Core </b> <br><br>                            
+                            <div id="chartUsedBlks" style="height: 300px; width: 80%; margin: auto;"></div> <br>
 
                         </div>
                     </div>
@@ -1024,7 +1029,9 @@
                             </table>
                         </div>
 
-                        <br><br><br><br><br><br><br><br>
+                        <br><br><br><br>
+                        <br><br><br><br>
+                        <br><br><br><br>
                         <div class="col-12 bg-light">
                             <b> Encryption, Compression & Dedupe options </b>
                             <table>
@@ -1039,6 +1046,7 @@
                                     <tr>
                                         <td> Compression </td>
                                         <td style="text-align: center; padding-left: 100px; padding-right: 100px;"> Compression happens only on data that is not deduped. If inline compression is enabled, all the new data that is written is compressed. Compression may either positively or negatively affect dedupe savings. Enable compression also has performance impact. </td>
+                                        
                                         <td> <a href="" ng-click="showCompressionPopup()"> Start compression / Show status</a></td>
                                     </tr>
                                     <tr>
@@ -1049,7 +1057,41 @@
                                 <tbody>
                             </table>
                         </div>
-                        <br><br><br> <br><br><br>
+                        <br><br><br> <br><br><br><br><br>
+                        <div class="col-12 bg-light">
+                            <b> Debug and filesystem examination </b>
+                            <table>
+                                <thead  style="color: darkgray;">
+                                    <tr>
+                                        <td style="width: 15%;"> <b> Item </b> </td>
+                                        <td style="width: 60%; text-align: center;"> <b> Description </b> </td>
+                                        <td style="width: 10%;"> <b> Enter </b> </td>
+                                        <td style="width: 15%;"> <b> Click </b> </td>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td> DBN </td>
+                                        <td style="text-align: center; padding-left: 100px; padding-right: 100px;"> Select a dbn to see its contents in hex</td>
+                                        <td><input type="number" name="v1111" id="" value="" placeholder="enter dbn"></td>
+                                        <td> <a href="" ng-click="notYetImplimented()"> View </a></td>
+                                    </tr>
+                                    <tr>
+                                        <td> WIP </td>
+                                        <td style="text-align: center; padding-left: 100px; padding-right: 100px;"> Examine a wip content both in HEX and in string representation </td>
+                                        <td><input type="number" name="v1111" id="" value="" placeholder="enter inode number"></td>
+                                        <td> <a href="" ng-click="notYetImplimented()"> View </a> </td>
+                                    </tr>
+                                    <tr>
+                                        <td> InodeFile </td>
+                                        <td style="text-align: center; padding-left: 100px; padding-right: 100px;"> Examine a fbn within the inode file </td>
+                                        <td><input type="number" name="v1111" id="" value="" placeholder="enter fbn" size=10></td>
+                                        <td> <a href="" ng-click="notYetImplimented()"> View </a> </td>
+                                    </tr>
+                                <tbody>
+                            </table>
+                        </div>
+                        <br><br><br> <br><br><br><br><br>
                     </div>
                 </div>
             </div>

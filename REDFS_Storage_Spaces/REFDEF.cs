@@ -9,6 +9,31 @@ using System.Security.Cryptography;
 
 namespace REDFS_ClusterMode
 {
+    public class RefObjSorterPlaceholder
+    {
+        public RefObjSorterPlaceholder(int i, long age)
+        {
+            index = i;
+            buffer_age = age;
+        }
+        public int index;
+        public long buffer_age;
+    }
+
+    public class wrcomparator_t : IComparer
+    {
+        int IComparer.Compare(object obj1, object obj2)
+        {
+            RefObjSorterPlaceholder w1 = (RefObjSorterPlaceholder)obj1;
+            RefObjSorterPlaceholder w2 = (RefObjSorterPlaceholder)obj2;
+
+            if (w1.buffer_age > w2.buffer_age)
+                return -1;
+            else if (w1.buffer_age > w2.buffer_age)
+                return 1;
+            return 0;
+        }
+    }
 
     public class wrcomparator : IComparer
     {
@@ -101,6 +126,17 @@ namespace REDFS_ClusterMode
 
         private static byte[] XORBUF = new byte[8192];
         private static byte[] buff_t8 = new byte[8];
+
+        private static MD5 md5 = System.Security.Cryptography.MD5.Create();
+
+        public static string compute_hash_string(byte[] data, int offset, int size)
+        {
+            lock (md5)
+            {
+                byte[] hash = md5.ComputeHash(data, offset, size);
+                return HashToString(hash);
+            }
+        }
 
         public static string HashToString(byte[] hash)
         {

@@ -51,6 +51,8 @@ namespace REDFS_ClusterMode
         public Boolean Equals(Red_Buffer other);
 
         public void touch();
+
+        public void update_fingerprint();
     }
 
 
@@ -151,7 +153,7 @@ namespace REDFS_ClusterMode
 
         public int tracker = 0;
         public string trackermsg;
-
+        public string fingerprint;
 
         public RedBufL0(long sf)
         {
@@ -160,6 +162,11 @@ namespace REDFS_ClusterMode
             needdbnreassignment = true;
             needtouchbuf = true;
             m_dbn = DBN.INVALID;
+        }
+
+        public void update_fingerprint()
+        {
+            fingerprint = OPS.compute_hash_string(data, 0, OPS.FS_BLOCK_SIZE);
         }
 
         int Red_Buffer.get_level() { return 0; }
@@ -245,6 +252,12 @@ namespace REDFS_ClusterMode
         private int mTimeToLive = 6;
         public bool needdbnreassignment;
         public bool needtouchbuf = true;
+        public string fingerprint;
+
+        public void update_fingerprint()
+        {
+            fingerprint = OPS.compute_hash_string(data, 0, OPS.FS_BLOCK_SIZE);
+        }
 
         public RedBufL1(long sf)
         {
@@ -352,6 +365,12 @@ namespace REDFS_ClusterMode
         public bool needtouchbuf = true;
 
         //public Red_Buffer[] m_chdptr = new Red_Buffer[OPS.FS_SPAN_OUT];
+        public string fingerprint;
+
+        public void update_fingerprint()
+        {
+            fingerprint = OPS.compute_hash_string(data, 0, OPS.FS_BLOCK_SIZE);
+        }
 
         public RedBufL2(long sf)
         {

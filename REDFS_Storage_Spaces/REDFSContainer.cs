@@ -133,7 +133,6 @@ namespace REDFS_ClusterMode
             ci.id = 0;
             ci.path = containerFolderPath + "\\primaryAutoCreatedChunk.redfs";
 
-            //using (FileStream sw1 = new FileStream(ci.path, FileMode.OpenOrCreate, FileAccess.Write))
             using (FileStream sw1 = new FileStream(ci.path, FileMode.OpenOrCreate))
             {
                 sw1.SetLength((long)2 * 1024 * 1024 * 1024);
@@ -145,7 +144,6 @@ namespace REDFS_ClusterMode
             using (StreamWriter sw = new StreamWriter(chunksFile))
             {
                 String vstr = JsonConvert.SerializeObject(ci, Formatting.None);
-                //Console.WriteLine(vstr);
                 sw.WriteLine(vstr);
             }
             return true;
@@ -241,7 +239,6 @@ namespace REDFS_ClusterMode
                         foreach (ChunkInfo chunk in redfsChunks.Values)
                         {
                             String vstr = JsonConvert.SerializeObject(chunk, Formatting.None);
-                            //Console.WriteLine(vstr);
                             sw.WriteLine(vstr);
                         }
                     }
@@ -432,7 +429,7 @@ namespace REDFS_ClusterMode
         {
             DEFS.ASSERT(REDFS.redfsContainer.containerOperations.currentlyMountedVolume >= 1, "should be greateer than 1");
             ifs = new IncoreFSSkeleton(ifsd_mux.RedfsVolumeTrees[REDFS.redfsContainer.containerOperations.currentlyMountedVolume]);
-            ifs.Mount(@"N:\", /*DokanOptions.DebugMode | DokanOptions.EnableNotificationAPI*/ DokanOptions.FixedDrive, /*treadCount=*/5, new NullLogger());
+            ifs.Mount(@"N:\", /*DokanOptions.DebugMode | DokanOptions.EnableNotificationAPI*/ DokanOptions.FixedDrive, /*treadCount=*/1, new NullLogger());
             Console.WriteLine("tBlockingDokanFSThread is done <><><><><><><<>");
         }
 

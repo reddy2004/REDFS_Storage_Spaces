@@ -37,6 +37,7 @@ namespace REDFS_TESTS
             Assert.AreEqual(OPS.NUM_PTRS_IN_WIP, 16);
             Assert.AreEqual(OPS.NUM_WIPS_IN_BLOCK, 32);
             RedFS_Inode wip = new RedFS_Inode(WIP_TYPE.REGULAR_FILE, 100, 99);
+            wip.isWipValid = true;
             wip.setfilefsid_on_dirty(1);
 
             Assert.IsTrue(wip.get_ino() == 100);
@@ -49,7 +50,6 @@ namespace REDFS_TESTS
             {
                 randDbns[i] = r.Next(1, Int32.MaxValue) + UInt32.MaxValue;
                 wip.set_child_dbn(i, randDbns[i]);
-
             }
 
             for (int i = 0; i < OPS.NUM_PTRS_IN_WIP; i++)
@@ -93,6 +93,8 @@ namespace REDFS_TESTS
             //Create a REDFS Inode of regular type file and populate test data. Write out to disk.
             //Read from disk to verify that the formatting and byte alignments etc are fine.
             RedFS_Inode inode = new RedFS_Inode(WIP_TYPE.REGULAR_FILE, 999, 998);
+
+            inode.isWipValid = true;
 
             for (int i = 0; i < OPS.NUM_PTRS_IN_WIP; i++)
             {

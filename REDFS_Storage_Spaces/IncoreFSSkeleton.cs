@@ -346,10 +346,10 @@ namespace REDFS_ClusterMode
         NtStatus IDokanOperations.GetDiskFreeSpace(out long freeBytesAvailable, out long totalNumberOfBytes, out long totalNumberOfFreeBytes, IDokanFileInfo info)
         {
             long totalSizeOfSegments = REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap.max_dbn * OPS.FS_BLOCK_SIZE;
-           // long totalUsage = (long)REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.allocBitMap32TBFile.USED_BLK_COUNT * OPS.FS_BLOCK_SIZE;
-            long totalUsage = (long)REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap.GetTotalAvailableFreeBlocks();
+            //long totalUsage = (long)REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.allocBitMap32TBFile.USED_BLK_COUNT * OPS.FS_BLOCK_SIZE;
+            long totalFree = (long)REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap.GetTotalAvailableFreeBlocks() * OPS.FS_BLOCK_SIZE;
 
-            freeBytesAvailable = totalSizeOfSegments - totalUsage;
+            freeBytesAvailable = totalFree;
             totalNumberOfBytes = totalSizeOfSegments;
             totalNumberOfFreeBytes = freeBytesAvailable;
             return DokanResult.Success;
@@ -372,6 +372,7 @@ namespace REDFS_ClusterMode
             else
             {
                 fileInfo = rootDirectory.GetFileInformationStruct(fileName);
+                //DEFS.DEBUG_GREEN("Fileinfo : " + fileInfo.FileName + " size:" + fileInfo.Length);
             }
             DokanSideMetrics.m.InsertMetric(METRIC_NAME.DOKAN_CALLS, 1);
             return DokanResult.Success;
@@ -388,7 +389,7 @@ namespace REDFS_ClusterMode
         {
             volumeLabel = "REDFS_Volume";
             fileSystemName = "REDFS";
-            maximumComponentLength = 256;
+            maximumComponentLength = 1024;
 
             features = FileSystemFeatures.CasePreservedNames | FileSystemFeatures.CaseSensitiveSearch |
                        FileSystemFeatures.SupportsRemoteStorage | FileSystemFeatures.UnicodeOnDisk;
@@ -433,6 +434,7 @@ namespace REDFS_ClusterMode
             DokanSideMetrics.m.StartMetric(METRIC_NAME.READ_FROM_FILE, (int)offset);
             if (rootDirectory.ReadFile(fileName, buffer, out bytesRead, offset))
             {
+                //DEFS.DEBUG_YELLOW("Readfile:" + fileName + " offset:" + offset + " size:" + buffer.Length);
                 ret = DokanNet.NtStatus.Success;
             }
             else
@@ -448,6 +450,9 @@ namespace REDFS_ClusterMode
         NtStatus IDokanOperations.SetAllocationSize(string fileName, long length, IDokanFileInfo info)
         {
             DokanSideMetrics.m.InsertMetric(METRIC_NAME.DOKAN_CALLS, 1);
+            throw new SystemException("SetAllocationSize " + length + " not implimened or called");
+
+            /*
             if (rootDirectory.SetAllocationSize(fileName, length, info.IsDirectory))
             {
                 return DokanResult.Success;
@@ -456,6 +461,10 @@ namespace REDFS_ClusterMode
             {
                 return DokanResult.DiskFull;
             }
+            */
+
+            //Same as setendof file for now
+            //return rootDirectory.SetEndOfFile(fileName, length, false) ? DokanNet.NtStatus.Success : DokanNet.NtStatus.Error;
         }
 
         NtStatus IDokanOperations.SetEndOfFile(string fileName, long length, IDokanFileInfo info)

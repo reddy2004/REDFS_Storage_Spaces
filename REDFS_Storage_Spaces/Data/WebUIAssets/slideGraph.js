@@ -477,7 +477,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
             width_in_pixel = width_in_pixel;
 
             var max_chunk_size = $scope.totalSizeInGB;
-            var chunk_usage_from_segment_map = $scope.listOfKnownValidSegmentsInContainer.length;
+            var chunk_usage_from_segment_map = $scope.listOfKnownSegmentsInContainer_length;
 
             /*
             for (var i=0;i<$scope.listOfKnownChunksInContainer.length;i++)
@@ -1173,14 +1173,19 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
                 var max_valid_segment = 0;
                 var add_empty_entries = 0;
+                $scope.listOfKnownSegmentsInContainer_length = 0;
+
                 for (var i=0;i<$scope.listOfKnownSegmentsInContainer.length;i++) {
                     if ($scope.listOfKnownSegmentsInContainer[i].isSegmentValid) {
                         max_valid_segment++;
+                        $scope.listOfKnownSegmentsInContainer_length++;
                     }
                 }
                 //alert(max_valid_segment);
                 for (var i=0;i<max_valid_segment;i++) {
                     if ($scope.listOfKnownSegmentsInContainer[i].isSegmentValid) {
+
+                        
 
                         if (i < 2 || i >  max_valid_segment - 2) {
                             $scope.listOfKnownValidSegmentsInContainer.push({
@@ -1647,29 +1652,32 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                     return options;
           }
 
-          function drawLinearGraphs(data) {
+          function drawLinearGraphs(data, coredata) {
 
               var options = GetOptionsForMetricGraphs("Latency", "Read Latency (ms)", " Write latency (ms)", "(ms)");
               options.data[0].dataPoints = [];
               options.data[1].dataPoints = [];
               options.title.text = "Read and Write latency";
 
+              //alert(data[1]);
+              //alert(JSON.stringify(data));
               for (var i=0;i<120;i++) {
                   options.data[0].dataPoints.push({x: i, y: data[1][i]});
                   options.data[1].dataPoints.push({x: i, y: data[2][i]});
+                  //console.log("Push " + data[1] + " and " + data[2]);
               }
-              //console.log(options);
+              
               //$(".loader").hide();
               
               $("#chartContainerRW").CanvasJSChart(options);
 
-
+              
 
               options = GetOptionsForMetricGraphs("Bytes R/W", "Read KB", "Write KB", " (KB)");
               options.title.text = "Data Moved I/O";
               options.data[0].dataPoints = [];
               options.data[1].dataPoints = [];
-              for (var i=0;i<120;i++) {
+              for (var i=0;i<data[3].length;i++) {
                   options.data[0].dataPoints.push({x: i, y: data[3][i]});
                   options.data[1].dataPoints.push({x: i, y: data[4][i]});
               }
@@ -1680,7 +1688,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
               options.title.text = "Dokan Calls";
               options.data[0].dataPoints = [];
               options.data[1].dataPoints = [];
-              for (var i=0;i<120;i++) {
+              for (var i=0;i<data[5].length;i++) {
                   options.data[0].dataPoints.push({x: i, y: data[5][i]});
                   options.data[1].dataPoints.push({x: i, y: data[5][i]});
               }
@@ -1692,11 +1700,22 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
               options.title.text = "Container Space Usage";
               options.data[0].dataPoints = [];
               options.data[1].dataPoints = [];
-              for (var i=0;i<120;i++) {
+              for (var i=0;i<data[6].length;i++) {
                   options.data[0].dataPoints.push({x: i, y: data[6][i]});
                   options.data[1].dataPoints.push({x: i, y: data[7][i]});
               }
               $("#chartContainerSpace").CanvasJSChart(options);
+           
+                   
+              options = GetOptionsForMetricGraphs("USED BLKS", "Used Blocks", "Free Queue", "(Blocks)");
+              options.title.text = "Block Usage (8KB)";
+              options.data[0].dataPoints = [];
+              options.data[1].dataPoints = [];
+              for (var i=0;i<data[6].length;i++) {
+                  options.data[0].dataPoints.push({x: i, y: coredata[14][i]});
+                  options.data[1].dataPoints.push({x: i, y: coredata[15][i]});
+              }
+              $("#chartUsedBlks").CanvasJSChart(options);
           }
 
           //Refresh thread, refreshes every 1 second
@@ -1708,7 +1727,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                    $.get("allmetrics", function( datastr ) {
                       var data = JSON.parse(datastr);
                       $scope.isDebugDataForGraphs = JSON.stringify(data);
-                      drawLinearGraphs(data);
+                      drawLinearGraphs(JSON.parse(data.dokan), JSON.parse(data.core));
                    });
 
               }
@@ -1768,7 +1787,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
         //Let make sure that the graphs come up quicky, even if its empty
         $scope.isDebugDataForGraphs = [[],[],[],[],[],[],[],[]];
-        drawLinearGraphs($scope.isDebugDataForGraphs);
+        drawLinearGraphs($scope.isDebugDataForGraphs, $scope.isDebugDataForGraphs);
 
     });
 

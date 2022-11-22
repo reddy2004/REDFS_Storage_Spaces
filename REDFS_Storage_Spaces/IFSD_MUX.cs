@@ -48,11 +48,13 @@ namespace REDFS_ClusterMode
         {
             int newFsidId = numValidFsids++;
 
-            do_fsid_sync_internal(rfsid.get_fsid());
+            lock (FSIDList)
+            {
+                do_fsid_sync_internal(rfsid.get_fsid(), false);
 
-            FSIDList[newFsidId] = redfsCore.redfs_dup_fsid(rfsid);
-            FSIDList[newFsidId].set_dirty(true);
-
+                FSIDList[newFsidId] = redfsCore.redfs_dup_fsid(rfsid);
+                FSIDList[newFsidId].set_dirty(true);
+            }
             RedfsVolumeTrees[newFsidId] = new REDFSTree(FSIDList[newFsidId], redfsCore);
             RedfsVolumeTrees[newFsidId].LoadRootDirectoryWipForNewlyCreatedFSID();
             return newFsidId;
@@ -66,15 +68,17 @@ namespace REDFS_ClusterMode
             Console.WriteLine("IN CreateAndInitNewFSIDFromRootVolume, numValidFsids = " + numValidFsids);
             int newFsidId = numValidFsids++;
 
-            FSIDList[newFsidId] = redfsCore.CreateEmptyFSID(newFsidId);
-            FSIDList[newFsidId].set_dirty(true);
+            lock (FSIDList)
+            {
+                FSIDList[newFsidId] = redfsCore.CreateEmptyFSID(newFsidId);
+                FSIDList[newFsidId].set_dirty(true);
 
-            RedfsVolumeTrees[newFsidId] = new REDFSTree(FSIDList[newFsidId], redfsCore);
+                RedfsVolumeTrees[newFsidId] = new REDFSTree(FSIDList[newFsidId], redfsCore);
 
-            RedfsVolumeTrees[newFsidId].CreateRootDirectoryWip(); //for the rootDir, i.e '\\'
+                RedfsVolumeTrees[newFsidId].CreateRootDirectoryWip(); //for the rootDir, i.e '\\'
 
-            //do_fsid_sync_internal(newFsidId); not required
-
+                //do_fsid_sync_internal(newFsidId); not required
+            }
             return newFsidId;
         }
 
@@ -167,7 +171,7 @@ namespace REDFS_ClusterMode
         private void W_GCThreadMux()
         {
             Console.WriteLine("IFSDMux : Starting gc/sync thread (Mux)...");
-            int next_wait = 3000;
+            int next_wait = 1000;
 
             while (true)
             {
@@ -184,23 +188,26 @@ namespace REDFS_ClusterMode
                     Thread.Sleep(next_wait);
                 }
 
-                for (int i = 0; i < (numValidFsids); i++)
+                lock (FSIDList)
                 {
-                    if (FSIDList[i] == null) {
-                        continue;
-                    }
-
-                    if (!FSIDList[i].isDirty())
+                    for (int i = 0; i < (numValidFsids); i++)
                     {
-                        continue;
+                        if (FSIDList[i] == null)
+                        {
+                            continue;
+                        }
+
+                        if (!FSIDList[i].isDirty())
+                        {
+                            continue;
+                        }
+
+                        //XXX possibly causing issues. Looks like we are writing out an older version of incore
+                        //inofile and when we sync elsewhere we dont update the ino file as its not dirty and we
+                        //drop the updates.
+                        do_fsid_sync_internal(i, true);
                     }
-
-                    //XXX possibly causing issues. Looks like we are writing out an older version of incore
-                    //inofile and when we sync elsewhere we dont update the ino file as its not dirty and we
-                    //drop the updates.
-                    //do_fsid_sync_internal(i);
                 }
-
                 if (m_shutdown && shutdownloop)
                 {
                     m_shutdown_done_gc = true;
@@ -214,7 +221,7 @@ namespace REDFS_ClusterMode
             Console.WriteLine("IFSDMux", "Leaving gc/sync thread (Mux)...");
         }
 
-        private void do_fsid_sync_internal(int id)
+        private void do_fsid_sync_internal(int id, bool clearOnlyCleanLOs)
         {
             if (m_shutdown == true)
             {
@@ -224,19 +231,30 @@ namespace REDFS_ClusterMode
 
             DEFS.ASSERT(FSIDList != null, "FSID List cannot be null");
             DEFS.ASSERT(FSIDList[id] != null, "FSID List at id: " + id + " cannot be null");
-            lock (FSIDList)
+            lock (FSIDList[id])
             {
                 if (id != 0)
                 {
                     RedfsVolumeTrees[id].SyncTree();
-                    RedfsVolumeTrees[id].FlushCacheL0s();
+                    if (clearOnlyCleanLOs)
+                    {
+                        RedfsVolumeTrees[id].FlushCacheL0s_Garbage_Collection();
+                    }
+                    else
+                    {
+                        RedfsVolumeTrees[id].FlushCacheL0s();
+                    }
+                    
                 }
 
                 if (FSIDList[id].isDirty())
                 {
                     RedFS_Inode inowip = FSIDList[id].get_inode_file_wip("GC2");
-                    redfsCore.sync(inowip);
-                    redfsCore.flush_cache(inowip, false);
+                    lock (inowip)
+                    {
+                        redfsCore.sync(inowip);
+                        redfsCore.flush_cache(inowip, false);
+                    }
                     redfsCore.redfs_commit_fsid(FSIDList[id]);
                 }
             }
@@ -251,23 +269,24 @@ namespace REDFS_ClusterMode
             {
                 for (int i = 0; i < numValidFsids; i++)
                 {
-                    lock (FSIDList[i])
+                    if (FSIDList[i] != null)
                     {
-                        if (FSIDList[i] != null)
+                        try
                         {
-                            try
-                            {
-                                do_fsid_sync_internal(i);
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine(e.Message);
-                            }
+                            do_fsid_sync_internal(i, false);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine(e.Message);
                         }
                     }
                 }
 
-                FSIDList = new RedFS_FSID[1024];
+                for (int i = 0; i < numValidFsids; i++)
+                {
+                    FSIDList[i] = null;
+                }
+
                 foreach (VirtualVolume v in volumeManager.volumes)
                 {
                     if (!v.isDeleted)
@@ -281,11 +300,16 @@ namespace REDFS_ClusterMode
                                 RedfsVolumeTrees[v.volumeId] = new REDFSTree(FSIDList[v.volumeId], redfsCore);
                                 RedfsVolumeTrees[v.volumeId].isReadOnlyVolume = v.isReadOnly;
 
+
                                 if (v.volumeId != 0)
                                 {
+                                    if (redfsCore.wip_checkin_fps[v.volumeId] == null)
+                                    {
+                                        redfsCore.wip_checkin_fps[v.volumeId] = new Dictionary<int, string>();
+                                    }
                                     RedfsVolumeTrees[v.volumeId].LoadRootDirectory();
                                 }
-                            } 
+                            }
                             catch (Exception e)
                             {
                                 Console.WriteLine(e.Message);
@@ -300,7 +324,10 @@ namespace REDFS_ClusterMode
                     }
                     else
                     {
-                        FSIDList[v.volumeId] = redfsCore.redFSPersistantStorage.read_fsid(v.volumeId);
+                        lock (FSIDList[v.volumeId])
+                        {
+                            FSIDList[v.volumeId] = redfsCore.redFSPersistantStorage.read_fsid(v.volumeId);
+                        }
                     }
 
                     if ((v.volumeId+1) > numValidFsids)

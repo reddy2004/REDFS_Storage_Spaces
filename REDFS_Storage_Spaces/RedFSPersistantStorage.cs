@@ -354,7 +354,6 @@ namespace REDFS_ClusterMode
                 lock (cfs)
                 {
                     cfs.Write(wbList[0].buf_to_data(), wpe.writeOffsets[0], 0, wbList[0].buf_to_data().Length);
-                    //Console.WriteLine(OPS.HashToString(wbList[0].buf_to_data()));
                     Console.WriteLine("Writing to loc ..... " + wpe.writeOffsets[0]);
                 }
             }

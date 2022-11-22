@@ -16,3 +16,10 @@ Make read only snapshots work
 When volume has data, backed clone is failing.
 
 Create vol->writedata ->do backed clone->delete data from snapshot->reload/clone orig volume ===> crash
+
+
+
+If we have a zipped folder in explorder. ex. manpasand.zip and lets say it has files inside
+While copying, windows first cretes  manpasand.zip as a file and then inside that tries to copy the 1.jpg, 2.jpg as contents.
+In redfs, we see that \\manpasand.zip is a file, and when we get a write to \\manpasand.zip\1.jpg etc, we panic.
+

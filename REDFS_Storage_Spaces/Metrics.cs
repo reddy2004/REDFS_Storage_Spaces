@@ -174,9 +174,11 @@ namespace REDFS_ClusterMode
             {
                 timeGraph.RemoveAt(0);   
             }
-            currentSlice.CompleteSlice();
-            timeGraph.Add(currentSlice);
-
+            lock (this)
+            {
+                currentSlice.CompleteSlice();
+                timeGraph.Add(currentSlice);
+            }
             currentSlice = new MetricSlice(currentSlice);
         }
 
@@ -193,16 +195,19 @@ namespace REDFS_ClusterMode
         public void StartMetric(METRIC_NAME type, int ukey)
         {
             string id = UniqueId(type, ukey);
-            if (ongoing.Contains(id))
+            lock (ongoing)
             {
-                //INCORRECT_START
-                ongoing.Remove(id); //or else it will fail again.
-            }
-            else
-            {
-                MetricEntry me = new MetricEntry();
-                me.start_millis = DateTime.UtcNow.Ticks;
-                ongoing.Add(id, me);
+                if (ongoing.Contains(id))
+                {
+                    //INCORRECT_START
+                    ongoing.Remove(id); //or else it will fail again.
+                }
+                else
+                {
+                    MetricEntry me = new MetricEntry();
+                    me.start_millis = DateTime.UtcNow.Ticks;
+                    ongoing.Add(id, me);
+                }
             }
         }
 
@@ -210,18 +215,23 @@ namespace REDFS_ClusterMode
         {
             string id = UniqueId(type, ukey);
             //Console.WriteLine(id);
-
-            if (ongoing.Contains(id))
+            lock (ongoing)
             {
-                MetricEntry me = (MetricEntry)ongoing[id];
-                me.end_millies = DateTime.UtcNow.Ticks;
-                long total_milis = me.end_millies - me.start_millis;
-                ongoing.Remove(id);
-                currentSlice.InsertEntry(type, total_milis);
-            }
-            else
-            {
-                //INCORRECT_END
+                if (ongoing.Contains(id))
+                {
+                    MetricEntry me = (MetricEntry)ongoing[id];
+                    me.end_millies = DateTime.UtcNow.Ticks;
+                    long total_milis = me.end_millies - me.start_millis;
+                    ongoing.Remove(id);
+                    lock (this)
+                    {
+                        currentSlice.InsertEntry(type, total_milis);
+                    }
+                }
+                else
+                {
+                    //INCORRECT_END
+                }
             }
         }
 
@@ -232,7 +242,10 @@ namespace REDFS_ClusterMode
 
         public string GetDetails(METRIC_NAME type)
         {
-            return currentSlice.GetDetails(type);
+            lock (this)
+            {
+                return currentSlice.GetDetails(type);
+            }
         }
 
         /*Array of arrays

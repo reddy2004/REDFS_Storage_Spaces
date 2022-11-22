@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 using DokanNet;
+using System.Collections;
 
 namespace REDFS_ClusterMode
 {
@@ -120,14 +121,6 @@ namespace REDFS_ClusterMode
         {
             return ondiskL0Blocks + ondiskL1Blocks + ondiskL2Blocks;
         }
-        public void Print_L0_DBNS()
-        {
-            for (int i=0;i< L0_DBNS.Length;i++)
-            {
-                Console.WriteLine(L0_DBNS[i]);
-            }
-            Console.WriteLine("-----------------------");
-        }
     }
 
     /*
@@ -149,13 +142,23 @@ namespace REDFS_ClusterMode
     public class RedFS_Inode
     {
         public Red_Buffer _lasthitbuf;
+        public string fingerprint;
 
         private WIP_TYPE wiptype;
 
         public byte[] data = new byte[OPS.WIP_SIZE];
 
+        public int dbnTreeReassignmentCount = 0;
+
         //For logging
         public List<string> logs = new List<string>();
+        public List<string> hashOfFBN2 = new List<string>();
+
+        //Logging, to be used only for inowip
+        public IDictionary fbn_wise_fps = new Dictionary<long, string>();
+
+        public bool isWipValid = false;
+
         public void log(string msg)
         {
             if (logs.Count == 100)
@@ -187,8 +190,20 @@ namespace REDFS_ClusterMode
 
         public long quickSearchStartDbnCachedValue = 0;
 
+        public void update_fingerprint()
+        {
+            DEFS.ASSERT(isWipValid, "wip must be valid and populated!");
+            fingerprint = OPS.compute_hash_string(data, 0, 160);
+        }
+
+        public void mark_isWipValid(bool flag)
+        {
+            isWipValid = flag;
+        }
+
         public RedFS_Inode(WIP_TYPE t, int ino, int pino)
         {
+            Array.Clear(data, 0, OPS.WIP_SIZE);
             m_ino = ino;
             for (int i = 0; i < 16; i++)
             {
@@ -199,6 +214,8 @@ namespace REDFS_ClusterMode
             set_int(WIDOffsets.wip_parent, pino);
             set_int(WIDOffsets.wip_inoloc, ino);
             is_dirty = false;
+
+            dbnTreeReassignmentCount = 0;
         }
 
         public Boolean Equals(RedFS_Inode other)
@@ -221,14 +238,6 @@ namespace REDFS_ClusterMode
                     return false;
                 }
             }
-            /*
-            for (int i=0;i < data.Length; i++)
-            {
-                if (this.data[i] != other.data[i])
-                {
-                    return false;
-                }
-            }*/
             return true;
         }
 
@@ -432,6 +441,13 @@ namespace REDFS_ClusterMode
             }
             m_ino = get_ino();
             size = get_long(WIDOffsets.wip_size);
+
+            //basic expectations, in future add checksum
+            if (m_ino >= 0 && size >=0 && (wiptype == WIP_TYPE.PUBLIC_INODE_FILE || wiptype == WIP_TYPE.PUBLIC_INODE_MAP ||
+                wiptype == WIP_TYPE.DIRECTORY_FILE || wiptype == WIP_TYPE.REGULAR_FILE))
+            {
+                isWipValid = true;
+            }
         }
 
         public bool verify_inode_number()
@@ -439,7 +455,7 @@ namespace REDFS_ClusterMode
             bool retval = (get_int(WIDOffsets.wip_inoloc) == m_ino) ? true : false;
             if (get_int(WIDOffsets.wip_inoloc) != 0 && !retval)
             {
-                //DEFS.DEBUGYELLOW("ERROR", "Some error is detected!! retval = " + retval);
+                DEFS.ASSERT(false, "ERROR Some error is detected!! retval = " + retval);
             }
             //DEFS.DEBUG("C", get_string_rep2());
             //DEFS.DEBUG("C", "in verify inode " + get_int(WIDOffsets.wip_inoloc) + "," + m_ino);
@@ -458,6 +474,7 @@ namespace REDFS_ClusterMode
 
         public void get_bytes(byte[] buf)
         {
+            DEFS.ASSERT(isWipValid, "wip must be valid when writing out to disk");
             DEFS.ASSERT(buf.Length == OPS.WIP_SIZE, "get_bytes will not work correctly for non-standard input");
             //DEFS.DEBUG("FSID", "Copying wip to file data - direct get, ino = " + get_ino());
             for (int i = 0; i < OPS.WIP_SIZE; i++)
