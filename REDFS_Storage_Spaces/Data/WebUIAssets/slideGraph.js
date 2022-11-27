@@ -58,6 +58,8 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
     $scope.visualizerTextKonvaItem1 = "";
     $scope.visualizerTextKonvaItem2 = "";
 
+    $scope.visualizeBlockInfoDebugData = {};
+
     $scope.toggleDebug = function() {
         $scope.showdebuginfo = ($scope.showdebuginfo == false)? true : false;
     }
@@ -457,6 +459,37 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
             }
         }
         return "";
+    }
+
+    $scope.visualizeBlockInfoDebug = function(type) {
+        var value = "";
+        $scope.visualizeBlockInfoDebugData.TitleBlockVisualizer = "Wait.. updating..";
+        $scope.visualizeBlockInfoDebugData.hexDisplay = [];
+        $scope.visualizeBlockInfoDebugData.wipList = [];
+        switch (type)
+        { 
+            case 'dbn':
+                value = $("#v1111").val();
+                break;
+            case 'inodenumber':
+                value = $("#v1112").val();
+                break;
+            case 'inodefbn':
+                value = $("#v1113").val();
+                break;
+            case 'fsid':
+                value = $("#v1114").val();
+                break;
+            default:
+                value = "";
+        }
+        
+           $.get("getblockrawdata?type=" + type + "&value=" + value, function( datastr ) {
+                  var data = JSON.parse(datastr);
+                  $scope.visualizeBlockInfoDebugData = data;
+                  $("#block_visualizer").modal();
+                  $scope.visualizeBlockInfoDebugData.TitleBlockVisualizer = "Viewing " + type + " of " + value;
+           });
     }
 
     $scope.visualizeSegment = function(visualizeid) {
@@ -892,7 +925,9 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
               url: '/volumeOperation',
               data: JSON.stringify (datax),
               success: function(data) {
-                 //alert('data: ' + data);
+                if (op == "mount") {
+                    alert('reply: ' + JSON.stringify(data));
+                }
                  callback();
               },
               contentType: "application/json",
@@ -1763,9 +1798,13 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                         },
                         {
                             data: "logicalData",
-                            title: "Logical Data"
+                            title: "Logical Data (bytes)"
                         },
+
                         {
+                            data: "logicalDataStr",
+                            title: "Logical Data (approx)"
+                        },                        {
                             data: "status",
                             title: "Status"
                         },

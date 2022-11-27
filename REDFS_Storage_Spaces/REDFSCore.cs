@@ -1478,8 +1478,6 @@ namespace REDFS_ClusterMode
                     long eof_read_boundary = fileoffset + blength;
                     if ((eof_read_boundary - wip.get_filesize()) > 0) //not sure why 4k page is assumed
                     {
-                        //Let caller figure out we are not going to give data beyond eof
-                        DEFS.DEBUG_GREEN("Trying to read beyond eof : wip " + wip.get_ino() + " actual: " + wip.get_filesize() + " versus " + eof_read_boundary);
                         blength = (int)(wip.get_filesize() - fileoffset);
                     }
                 }
@@ -1903,7 +1901,10 @@ namespace REDFS_ClusterMode
             if (level == 1)
             {
                 if (wip._lasthitbuf != null && wip._lasthitbuf.get_start_fbn() == start_fbn)
+                {
+                    //This must be touched so that its in memory and not GC'd
                     return wip._lasthitbuf;
+                }
             }
 
             for (int idx = 0; idx < (list.Count); idx++)

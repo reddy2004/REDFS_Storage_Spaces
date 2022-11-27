@@ -77,6 +77,20 @@ namespace REDFS_ClusterMode
             info.Context = null;
         }
 
+        private bool LowMemoryLimitReached()
+        {
+            long totalFree = (long)REDFS.redfsContainer.ifsd_mux.redfsCore.redfsBlockAllocator.dbnSpanMap.GetApproximateMemoryAvailable();
+
+            if (totalFree < 1024 * 4) //8MB left
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        }
+
         NtStatus IDokanOperations.CreateFile(string fileName, FileAccess access, FileShare share, FileMode mode, FileOptions options, FileAttributes attributes, IDokanFileInfo info)
         {
             var filePath = fileName;
@@ -88,11 +102,6 @@ namespace REDFS_ClusterMode
                 return DokanNet.DokanResult.Success;
             }
 
-            if (fileName == "\\hello" && !rootDirectory.FileExists("\\12GBFile.dat"))
-            {
-                rootDirectory.CreateFile("\\12GBFile.dat");
-                rootDirectory.SetEndOfFile("\\12GBFile.dat", (long)12 * 1024 * 1024 * 1024, true);
-            }
 
             if (fileName == "\\")
             {
@@ -507,6 +516,12 @@ namespace REDFS_ClusterMode
         NtStatus IDokanOperations.WriteFile(string fileName, byte[] buffer, out int bytesWritten, long offset, IDokanFileInfo info)
         {
             DokanSideMetrics.m.InsertMetric(METRIC_NAME.DOKAN_CALLS, 1);
+
+            if (!LowMemoryLimitReached())
+            {
+                bytesWritten = 0;
+                return DokanNet.NtStatus.NoMemory;
+            }
 
             logicalData += buffer.Length;
             physicalData += buffer.Length / 2;

@@ -208,9 +208,10 @@ namespace REDFS_ClusterMode
         public int      totalFreeBlocks = 0;
         public UInt32   spanUniqueHash;
 
+
         public DBNSegmentSpan()
-        { 
-        
+        {
+
         }
 
         //Parse data directly from disk. Pos=>position of this span if its raid5. For default and mirror its zero
@@ -613,10 +614,18 @@ namespace REDFS_ClusterMode
 
         public long totalPhysicalBlocksInFileSystem = 0;
 
+        /*
+         * Timer to keep track of approximate memory left in container. We conk off when the memory is less than 0.1 sec of max write speed
+         * In SSD, top speed is 300 MBPS, so we start throwing IO errors when we hit 32MB of storage left
+         */
+        long timer_start_millis = 0;
+        long timer_cached_available_blocks = 0;
+
         public DBNSegmentSpanMap(int numSpans)
         {
             startDBNToDBNSegmentSpan = new DBNSegmentSpan[numSpans];
             isSpanMapInited = true;
+            timer_start_millis = DateTime.UtcNow.Ticks;
         }
 
         public DBNSegmentSpanMap()
@@ -656,9 +665,9 @@ namespace REDFS_ClusterMode
                     startDBNToDBNSegmentSpan[i].GetStartAndEndDBNForSpan(out sdbn, out edbn, out numblks);
                     max_dbn = edbn;
                     totalPhysicalBlocksInFileSystem += numblks;
-    }
+                }
             }
-            
+            timer_cached_available_blocks = GetTotalAvailableFreeBlocks();
             isSpanMapInited = true;
         }
 
@@ -779,6 +788,25 @@ namespace REDFS_ClusterMode
                 }
             }
             return usedSegments;
+        }
+
+        public long GetApproximateMemoryAvailable()
+        {
+            long timer_end_millies = DateTime.UtcNow.Ticks;
+            long total_milis = timer_end_millies - timer_start_millis;
+
+            timer_start_millis = DateTime.UtcNow.Ticks;
+
+            if (total_milis < 100)
+            {
+                //In approx 0.1 second, we could be having less than 32mb left
+                return timer_cached_available_blocks;
+            }
+            else
+            {
+                timer_cached_available_blocks = GetTotalAvailableFreeBlocks();
+                return timer_cached_available_blocks;
+            }
         }
 
         public long GetTotalAvailableFreeBlocks()
@@ -1106,6 +1134,11 @@ namespace REDFS_ClusterMode
 
         public ReadPlanElement PrepareReadPlanSingle(long dbn)
         {
+            if (dbn >= totalPhysicalBlocksInFileSystem)
+            {
+                return null;
+            }
+
             if (isSpanMapOkay())
             {
                 DBNSegmentSpan span = GetDBNSegmentSpan(dbn);
@@ -1133,6 +1166,14 @@ namespace REDFS_ClusterMode
         public List<ReadPlanElement> PrepareReadPlan(long[] dbns)
         {
             List<ReadPlanElement> rpeList = new List<ReadPlanElement>();
+            for (var i = 0; i < dbns.Length; i++)
+            {
+                if (dbns[i] > max_dbn) // totalPhysicalBlocksInFileSystem)
+                {
+                    return rpeList;
+                }
+            }
+
             if (isSpanMapOkay())
             {
                 long[] start_dbns = new long[dbns.Length];
@@ -1162,6 +1203,11 @@ namespace REDFS_ClusterMode
 
         public WritePlanElement PrepareWritePlanSingle(long dbn)
         {
+            if (dbn >= totalPhysicalBlocksInFileSystem)
+            {
+                return null;
+            }
+
             if (isSpanMapOkay())
             {
                 DBNSegmentSpan span = GetDBNSegmentSpan(dbn);
@@ -1211,6 +1257,15 @@ namespace REDFS_ClusterMode
         public List<WritePlanElement> PrepareWritePlan(long[] dbns, SPAN_TYPE type)
         {
             List<WritePlanElement> wpeList = new List<WritePlanElement>();
+
+            for (var i = 0; i < dbns.Length; i++)
+            {
+                if (dbns[i] >= totalPhysicalBlocksInFileSystem)
+                {
+                    return wpeList;
+                }
+            }
+
             if (isSpanMapOkay())
             {
                 //Verify multiple of 4 and all contigious.

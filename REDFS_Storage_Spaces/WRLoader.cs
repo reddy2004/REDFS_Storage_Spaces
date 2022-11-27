@@ -451,11 +451,15 @@ namespace REDFS_ClusterMode
         {
             byte[] buffer = new byte[OPS.FS_BLOCK_SIZE];
 
+
             lock (tfile0)
             {
                 tfile0.Seek((long)cu.tfbn * OPS.FS_BLOCK_SIZE, SeekOrigin.Begin);
                 tfile0.Read(tmpiodatatfileR, 0, OPS.FS_BLOCK_SIZE);
+
                 OPS.Decrypt_Read_WRBuf(tmpiodatatfileR, buffer);
+                string tfileblockhash = OPS.compute_hash_string(buffer, 0, OPS.FSID_BLOCK_SIZE);
+                DEFS.DEBUG_RED("Reading TFILE hash:" + tfileblockhash + ", tfbn : " + cu.tfbn);
             }
 
            
@@ -471,11 +475,12 @@ namespace REDFS_ClusterMode
                 for (int t = 0; t < OPS.WIP_SIZE; t++) buf[t] = buffer[i * OPS.WIP_SIZE + t];
                 wip.parse_bytes(buf);
 
-                if (!wip.isWipValid || wip.get_ino() < 2 || wip.get_filesize() >= 0)
+                if (!wip.isWipValid) // || wip.get_ino() < 2 || wip.get_filesize() >= 0)
                 {
                     DEFS.DEBUG_RED("wip in tfbn is invalid, pass on !");
                     continue;
                 }
+
                 BLK_TYPE type = BLK_TYPE.IGNORE;
                 int numidx = 0;
 
@@ -506,6 +511,8 @@ namespace REDFS_ClusterMode
                 {
                     long dbn = wip.get_child_dbn(x);
                     if (dbn <= 0) continue;
+
+                    DEFS.DEBUG_GREEN("Inofile REF Update: inonum: " + wip.get_ino() + ",dbn : " + dbn + ", size:" + wip.get_filesize() + ", idx: " + i + ", childcnt:" + childcnt);
                     apply_update_internal(dbn, type, childcnt, cu.optype, true);
                 }
             }
@@ -551,6 +558,7 @@ namespace REDFS_ClusterMode
             {
                 long dbnt = wbe.get_child_dbn(i);
                 if (dbnt <= 0) continue;
+                DEFS.DEBUG_GREEN("regfile REF Update: tfbn : + " + cu.tfbn + ", dbn : " + dbnt + ", idx: " + i + ", childcnt:" + childcnt);
                 apply_update_internal(dbnt, belowtype, childcnt, cu.optype, true);
             }
         }
@@ -570,19 +578,6 @@ namespace REDFS_ClusterMode
                 {
                     GLOBALQ.m_deletelog2.Add(dbn); //to set bit free in allocmap
                 }
-                /*
-                lock (GLOBALQ.m_deletelog3)
-                {
-                    GLOBALQ.m_deletelog3.Add(dbn); //to increment free block counter in span map
-                }
-                */
-                lock (GLOBALQ.m_deletelog_spanmap)
-                {
-                    //XXX todo, if bit is free, then we must also update the spanmap so it know that the bit became free and it can
-                    //then update the used block counter.
-                    //GLOBALQ.m_deletelog_spanmap.Add(dbn);
-                }
-                
                 blocksMarkedForFreeing++;
             }
         }
@@ -593,7 +588,6 @@ namespace REDFS_ClusterMode
          */
         public void tServiceThread()
         {
-            //long protected_blkdiff_counter = 0;
             long[] protected_blkdiff_counter = new long[1024];
 
             while (true)
@@ -604,19 +598,16 @@ namespace REDFS_ClusterMode
                 {
                     internal_sync_and_flush_cache_advanced();
                     DEFS.ASSERT(GLOBALQ.m_reqi_queue.Count == 0, "There cannot be any pending updates when shutting down");
-                    //DEFS.DEBUGYELLOW("REF", "Bailing out now!!");
-                    //dont take a lock here.
+
 
                     for (int i = 0; i < 1024; i++)
                     {
-                        /* comment as not yet implimented
-                        if (REDDY.FSIDList[i] == null || protected_blkdiff_counter[i] == 0)
+                        if (REDFS.redfsContainer.ifsd_mux.FSIDList[i] == null || protected_blkdiff_counter[i] == 0)
                             continue;
 
-                        REDDY.FSIDList[i].diff_upadate_logical_data(protected_blkdiff_counter[i]);
-                        REDDY.FSIDList[i].set_dirty(true);
+                        REDFS.redfsContainer.ifsd_mux.FSIDList[i].diff_upadate_logical_data(protected_blkdiff_counter[i]);
+                        REDFS.redfsContainer.ifsd_mux.FSIDList[i].set_dirty(true);
                         protected_blkdiff_counter[i] = 0;
-                        ..end comment */
                     }
 
                     cu.processed = true;
@@ -631,14 +622,12 @@ namespace REDFS_ClusterMode
                     //dont take a lock here.
                     for (int i = 0; i < 1024; i++)
                     {
-                        /* comment as not yet implimented
-                        if (REDDY.FSIDList[i] == null || protected_blkdiff_counter[i] == 0)
+                        if (REDFS.redfsContainer.ifsd_mux.FSIDList[i] == null || protected_blkdiff_counter[i] == 0)
                             continue;
 
-                        REDDY.FSIDList[i].diff_upadate_logical_data(protected_blkdiff_counter[i]);
-                        REDDY.FSIDList[i].set_dirty(true);
+                        REDFS.redfsContainer.ifsd_mux.FSIDList[i].diff_upadate_logical_data(protected_blkdiff_counter[i]);
+                        REDFS.redfsContainer.ifsd_mux.FSIDList[i].set_dirty(true);
                         protected_blkdiff_counter[i] = 0;
-                         end comment..*/
                     }
                     cu.processed = true;
                     tfile0.Flush();
@@ -676,7 +665,7 @@ namespace REDFS_ClusterMode
                 total_ops++;
                 counter++;
 
-                /* 
+                /*
                  * Now if this has a child update pending, then we must clean it up.
                  * For each entry, i.e dbn, load the upto 1024, into memory and update
                  * the refcount. Essentially when we access this buffer - it must not
@@ -896,8 +885,12 @@ namespace REDFS_ClusterMode
             {
                 lock (tfile0)
                 {
+                    string tfileblockhash = OPS.compute_hash_string(wb.buf_to_data(), 0, OPS.FSID_BLOCK_SIZE);
+                    DEFS.DEBUG_RED("writing TFILE hash:" + tfileblockhash + ", ino:" + ino + ",level: " + wb.get_level() + ", dbn : " + wb.get_ondisk_dbn() + ", tfbn:" + tfilefbn + ", startfbn:" + wb.get_start_fbn());
+
                     OPS.Encrypt_Data_ForWrite(tmpiodatatfileW, wb.buf_to_data());
                     tfile0.Seek((long)tfilefbn * OPS.FS_BLOCK_SIZE, SeekOrigin.Begin);
+
                     tfile0.Write(tmpiodatatfileW, 0, OPS.FS_BLOCK_SIZE);
                     r.tfbn = tfilefbn;
                     tfilefbn++;
@@ -911,7 +904,7 @@ namespace REDFS_ClusterMode
             if (optype != REFCNT_OP.INCREMENT_REFCOUNT_ALLOC && optype != REFCNT_OP.DECREMENT_REFCOUNT &&
                     optype != REFCNT_OP.DECREMENT_REFCOUNT_ONDEALLOC && optype != REFCNT_OP.TOUCH_REFCOUNT)
             {
-                Console.WriteLine("REFCNT", "Queued update for " + r.blktype + ", dbn = " +
+                Console.WriteLine("REFCNT: Queued update for " + r.blktype + ", dbn = " +
                         r.dbn + ", and operation = " + r.optype + ", transaction offset : " + r.tfbn);
             }
 

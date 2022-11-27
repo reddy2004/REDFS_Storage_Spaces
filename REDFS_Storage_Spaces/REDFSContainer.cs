@@ -365,6 +365,20 @@ namespace REDFS_ClusterMode
             }
         }
 
+        public bool AreAllChunkAvailableAndOnline()
+        {
+            foreach (var item in redfsChunks.Values)
+            {
+                ChunkInfo ci = (ChunkInfo)item;
+                if (ci.chunkIsAccessible == false)
+                {
+                    Console.WriteLine("Chunk is not accessible, hence we cannot mount any volume.!");
+                    Console.WriteLine(ci.path);
+                    return false;
+                }
+            }
+            return true;
+        }
 
         public List<ChunkInfo> getChunksInContainer()
         {

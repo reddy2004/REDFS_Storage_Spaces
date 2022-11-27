@@ -11,15 +11,24 @@ The stripe hole can only filled by background scanners, wich we are offline.
 ** If we have [0,1,0,2], and we allow live writes, then we could have one file writing to block 0 and another file
 trying to write to the third block creating race conditions.
 
-Make read only snapshots work
-
-When volume has data, backed clone is failing.
-
-Create vol->writedata ->do backed clone->delete data from snapshot->reload/clone orig volume ===> crash
-
-
 
 If we have a zipped folder in explorder. ex. manpasand.zip and lets say it has files inside
 While copying, windows first cretes  manpasand.zip as a file and then inside that tries to copy the 1.jpg, 2.jpg as contents.
 In redfs, we see that \\manpasand.zip is a file, and when we get a write to \\manpasand.zip\1.jpg etc, we panic.
 
+logical data accounting is messed up. Create a vol1 from root volume
+Keep adding data to vol1. The logical data usage of root volume also keeps increasing.
+
+Similarly stop io and throw R/W exception when container if full instead of crashing.
+
+Remounting volume does not show used size in windows explorer.
+
+Create vol1 - add data.
+Clone vol1 and verify
+mount vol1 and delete data
+Now actual physical data has not changed since vol1 was cloned. Deleted vol1 data should not affect block usage. however
+block usage is unaccounted and we tend to show that blocks are being freed up.
+Data shown in explorer is also wrtong. Ex. 2.5 gb used in 2gb harddisk. very wrong. This also causes space usage in segment to be shown incorrectly
+in redfs ui
+
+Avoid calling touch refcount on blocks that are allocated during write path. For all files including the inode file.

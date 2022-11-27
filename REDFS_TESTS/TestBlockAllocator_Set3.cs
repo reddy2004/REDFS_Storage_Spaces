@@ -36,7 +36,6 @@ namespace REDFS_TESTS
             REDFS.CleanupTestContainer(containerName);
         }
 
-
         /*
          * Here we will be doing more complicated tests. Firstly by creating a container with multiple Span types.
          * Allocating as needed and free blocks as needed. Then we unmount container, remount it and check that

@@ -33,6 +33,7 @@ namespace REDFS_ClusterMode
 
 
         public long logicalData { get; set; }
+        public string logicalDataStr { get; set; }
 
         public DateTime volumeCreateTime { get; set; }
         public String hexcolor { get; set; }
@@ -371,6 +372,13 @@ namespace REDFS_ClusterMode
         }
 
         public String GetVolumeJSONList() {
+            foreach(VirtualVolume v in volumes)
+            {
+                int volid = v.volumeId;
+                v.logicalData = REDFS.redfsContainer.ifsd_mux.FSIDList[volid].get_logical_data();
+                
+                v.logicalDataStr = OPS.getDataInStringRep(v.logicalData);
+            }
             string json = JsonConvert.SerializeObject(volumes, Formatting.Indented);
             return json;
         }

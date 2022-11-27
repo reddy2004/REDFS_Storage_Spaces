@@ -616,7 +616,6 @@ namespace REDFS_ClusterMode
         
         
         public static List<long> m_deletelog2 = new List<long>();
-        //public static List<long> m_deletelog3 = new List<long>();
 
         public static List<long> m_deletelog_spanmap = new List<long>();
 

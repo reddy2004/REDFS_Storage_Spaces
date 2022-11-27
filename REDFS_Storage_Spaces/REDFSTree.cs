@@ -48,7 +48,7 @@ namespace REDFS_ClusterMode
             byte[] buffer = new byte[rootDirSize];
             redfsCoreLocalCopy.redfs_read(((REDFSInode)inodes["\\"]).myWIP, 0, buffer, 0, buffer.Length);
             string result = System.Text.Encoding.UTF8.GetString(buffer);
-            Console.WriteLine("Load root dir wip from new fsid : " + result);
+            //Console.WriteLine("Load root dir wip from new fsid : " + result);
         }
 
         /*
@@ -111,7 +111,7 @@ namespace REDFS_ClusterMode
             string result = System.Text.Encoding.UTF8.GetString(buffer);
 
             rootDir.cache_string = result;
-            Console.WriteLine("Load rootdir : " + result);
+            //Console.WriteLine("Load rootdir : " + result);
 
             try
             {
@@ -175,6 +175,7 @@ namespace REDFS_ClusterMode
                         if (currDir.isInodeSkeleton)
                         {
                             DEFS.ASSERT(currDir.isDirectory() == true, "We should be loading a directory and not a file!");
+                            DEFS.ASSERT(currDir.isDirty == false, "Skeleton must not be dirty!");
 
                             /*
                              * Now that its a skeleton, we have to load all the contents of this dir into inodes[].
@@ -202,6 +203,8 @@ namespace REDFS_ClusterMode
                                 string fullChildPath = (path == "\\") ? ("\\" + item.fileInfo.FileName) : (path + "\\" + item.fileInfo.FileName);
 
                                 //too weird logic
+                                //XXX RACE between delete and load directory. After delete, we try to load directory, the file that is supposed
+                                //to be in folder is deleted and zerod out, but we read zero'd wip and panic.
                                 if (!currDir.items.Contains(item.fileInfo.FileName))
                                 {
                                     currDir.items.Add(item.fileInfo.FileName);
@@ -230,7 +233,7 @@ namespace REDFS_ClusterMode
                                     DEFS.ASSERT(((REDFSInode)inodes[fullChildPath]).myWIP.m_ino == item.ino, "wip shhould be correct atleast!");
                                     
                                     //Fix this, allow dirty children inside skeleton directories
-                                    //DEFS.ASSERT(((REDFSInode)inodes[fullChildPath]).myWIP.is_dirty == false, "parent is skeleton so wip should not be dirty");
+                                    DEFS.ASSERT(((REDFSInode)inodes[fullChildPath]).myWIP.is_dirty == false, "parent is skeleton so wip should not be dirty");
                                 }
                             }
                             currDir.isInodeSkeleton = false;
@@ -617,9 +620,13 @@ namespace REDFS_ClusterMode
             {
                 if (LoadInode(path))
                 {
+                    
                     string finalComponent;
                     string parent = GetParentPath(path, out finalComponent);
                     REDFSInode rfi = (REDFSInode)inodes[parent];
+
+                    DEFS.ASSERT(rfi.isInodeSkeleton == false, "Cannot be false after load inode!");
+
                     lock (rfi)
                     {
                         DEFS.ASSERT(rfi != null && rfi.isDirectory(), "Should be a directory!");
@@ -631,7 +638,7 @@ namespace REDFS_ClusterMode
                         {
                             inodes.Remove(path);
                         }
-                        RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("CreateFileInternal");
+                        RedFS_Inode inowip = fsidLocalCopy.get_inode_file_wip("delete file");
                         lock (inowip)
                         {
                             RedFS_Inode mywip = rfi2.myWIP;
@@ -667,47 +674,54 @@ namespace REDFS_ClusterMode
 
         public Boolean DeleteDirectory(string path)
         {
-            if (LoadInode(path))
+            lock (inodes)
             {
-                string finalComponent;
-                string parent = GetParentPath(path, out finalComponent);
-
-                REDFSInode rfi = (REDFSInode)inodes[parent];
-                DEFS.ASSERT(rfi != null && rfi.isDirectory(), "Should be a directory!");
-
-                REDFSInode rfit = (REDFSInode)inodes[path];
-                DEFS.ASSERT(rfit != null && rfit.isDirectory(), "Should be a directory!");
-
-                List<string> clist = (List<string>)rfit.ListFilesWithPattern("*");
-
-                //first copy the list
-                List<string> children = new List<string>();
-                foreach (var c in clist)
+                if (LoadInode(path))
                 {
-                    children.Add(c);
-                }
+                    string finalComponent;
+                    string parent = GetParentPath(path, out finalComponent);
 
-                foreach (var child in children)
+                    REDFSInode rfi = (REDFSInode)inodes[parent];
+
+                    lock (rfi)
+                    {
+                        DEFS.ASSERT(rfi != null && rfi.isDirectory(), "Should be a directory!");
+
+                        REDFSInode rfit = (REDFSInode)inodes[path];
+                        DEFS.ASSERT(rfit != null && rfit.isDirectory(), "Should be a directory!");
+
+                        List<string> clist = (List<string>)rfit.ListFilesWithPattern("*");
+
+                        //first copy the list
+                        List<string> children = new List<string>();
+                        foreach (var c in clist)
+                        {
+                            children.Add(c);
+                        }
+
+                        foreach (var child in children)
+                        {
+                            string childpath = path + "\\" + child;
+                            if (DirectoryExists(childpath))
+                            {
+                                DeleteDirectory(childpath);
+                            }
+                            else
+                            {
+                                DeleteFile(childpath);
+                            }
+                        }
+
+                        rfi.items.Remove(finalComponent);
+                        rfi.isDirty = true;
+                        inodes.Remove(path);
+                        return true;
+                    }
+                }
+                else
                 {
-                    string childpath = path + "\\" + child;
-                    if (DirectoryExists(childpath))
-                    {
-                        DeleteDirectory(childpath);
-                    }
-                    else
-                    {
-                        DeleteFile(childpath);
-                    }
+                    return false;
                 }
-
-                rfi.items.Remove(finalComponent);
-                rfi.isDirty = true;
-                inodes.Remove(path);
-                return true;
-            }
-            else
-            {
-                return false;
             }
         }
 

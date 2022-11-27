@@ -10,6 +10,81 @@ using System.Threading;
 
 namespace REDFS_ClusterMode
 {
+    public class RawBlockDataInfo
+    {
+        public string type;
+        public long value; //dbn, inodenumber or inodefbn
+        public int size; //either 8192 or 256
+
+        public int refcount = 0;
+        public int childrefcount = 0;
+
+        public string hash = "";
+
+        public string[] hexDisplay; //display in hex of the content
+        public RedFS_Inode[] wipList; //either one single entry or upto 32 entries.
+
+        public RawBlockDataInfo(string type1, long value1)
+        {
+            hexDisplay = new string[1];
+            hexDisplay[0] = "<empty";
+
+            wipList = new RedFS_Inode[1];
+            wipList[0] = new RedFS_Inode(WIP_TYPE.UNDEFINED, 0, 0);
+
+            byte[] buff = new byte[OPS.WIP_SIZE];
+            wipList[0].parse_bytes(buff);
+
+            type = type1;
+            value = value1;
+
+            generateDataForUIChecking();
+        }
+
+        public void generateDataForUIChecking()
+        {
+            byte[] buffer = new byte[OPS.FS_BLOCK_SIZE];
+            //Random r = new Random();
+            //r.NextBytes(buffer);
+
+            REDFS.redfsContainer.ifsd_mux.redfsCore.redfs_do_raw_read_block(value, buffer, 0);
+
+            hash = OPS.compute_hash_string(buffer, 0, OPS.FS_BLOCK_SIZE);
+
+            int numLines = OPS.FS_BLOCK_SIZE / 64;
+            hexDisplay = new string[numLines];
+
+            for (int i=0;i<numLines;i++)
+            {
+                byte[] hash = new byte[64];
+                for (int j=0;j<64;j++)
+                {
+                    hash[j] = buffer[i * 64 + j];
+                }
+                hexDisplay[i] = "[" + (i * 64) + "]      " +  OPS.HashToString(hash);
+            }
+
+            wipList = new RedFS_Inode[OPS.NUM_WIPS_IN_BLOCK];
+
+            for (int i=0; i<  OPS.NUM_WIPS_IN_BLOCK;i++)
+            {
+                wipList[i] = new RedFS_Inode(WIP_TYPE.UNDEFINED, 0, 0);
+                byte[] wipdata = new byte[OPS.WIP_SIZE];
+                for (int j=0;j<OPS.WIP_SIZE;j++)
+                {
+                    wipdata[j] = buffer[i * OPS.WIP_SIZE + j];
+                }
+                wipList[i].parse_bytes(wipdata);
+
+                wipList[i].fingerprint = ""; //overload
+                for (int k=0;k<16;k++)
+                {
+                    wipList[i].fingerprint += (" " +  wipList[i].get_child_dbn(k));
+                }
+            }
+        }
+    }
+
     public class MetricsSummaryOutput
     {
         //JSON strings, must be extracted and parsed to json again on client side.
@@ -255,6 +330,26 @@ namespace REDFS_ClusterMode
                         resp.OutputStream.Write(data);
                     }
                     resp.Close();
+                }
+                else if ((req.HttpMethod == "GET") && req.Url.AbsolutePath.IndexOf("/getblockrawdata") == 0)
+                {
+                    string type = req.QueryString["type"];
+                    string value = req.QueryString["value"];
+                    DEFS.DEBUG_GREEN("Get raw data type: " + type + " and value: " + value + " parsed to :" + long.Parse(value));
+                    try
+                    {
+                        RawBlockDataInfo rbdi = new RawBlockDataInfo(type, long.Parse(value));
+
+                        string json = JsonConvert.SerializeObject(rbdi, Formatting.Indented);
+                        byte[] data = Encoding.UTF8.GetBytes(json);
+                        resp.OutputStream.Write(data);
+                        resp.Close();
+                    } 
+                    catch (Exception e)
+                    {
+                        resp.OutputStream.Write(Encoding.UTF8.GetBytes(e.Message));
+                        resp.Close();
+                    }
                 }
                 else if ((req.HttpMethod == "GET") && req.Url.AbsolutePath.IndexOf("/newContainer") == 0)
                 {
@@ -564,34 +659,55 @@ namespace REDFS_ClusterMode
                         }
                         else
                         {
+                            bool operationSucessfull = true;
+                            string operationStatusMessage = "";
+
                             try
                             {
                                     switch (b2.operation)
                                 {
                                     case "delete":
-                                        volumeManager.DeleteVolume(b2.volumeId);
+                                        if (volumeManager.DeleteVolume(b2.volumeId))
+                                        {
+                                            operationStatusMessage = "Volume sucessfully deleted";
+                                        }
+                                        else
+                                        {
+                                            operationStatusMessage = "Failed to delete the volume!";
+                                        }
                                         REDFS.redfsContainer.ReloadAllFSIDs();
                                         break;
                                     case "backedclone":
                                         REDFS.redfsContainer.ifsd_mux.Sync();
                                         volumeManager.CloneVolume(b2.volumeId, b2.volname);
+                                        operationStatusMessage = "Clone operation issued!";
                                         REDFS.redfsContainer.ReloadAllFSIDs();
                                         break;
                                     case "clone":
                                         volumeManager.CloneVolumeRaw(b2.volumeId, b2.volname, b2.volDesc, b2.hexcolor);
+                                        operationStatusMessage = "Clone operation issued!";
                                         REDFS.redfsContainer.ReloadAllFSIDs();
                                         break;
                                     case "snapshot":
                                         volumeManager.VolumeSnapshot(b2.volumeId, b2.volname);
+                                        operationStatusMessage = "Snapshot operation issued!";
                                         REDFS.redfsContainer.ReloadAllFSIDs();
                                         break;
                                     case "save":
                                         volumeManager.UpdateVolume(b2.volumeId, b2.volname, b2.volDesc, b2.hexcolor);
+                                        operationStatusMessage = "Updated volume issued!";
                                         break;
                                     case "mount":
-                                        REDFS.redfsContainer.containerOperations.currentlyMountedVolume = b2.volumeId;
-                                        REDFS.redfsContainer.MountVolume((int)b2.volumeId);
-                                        //volumeManager.MountVolume(b2.volumeId);
+                                        if (REDFS.redfsContainer.AreAllChunkAvailableAndOnline())
+                                        {
+                                            REDFS.redfsContainer.containerOperations.currentlyMountedVolume = b2.volumeId;
+                                            REDFS.redfsContainer.MountVolume((int)b2.volumeId);
+                                        }
+                                        else
+                                        {
+                                            operationSucessfull = false;
+                                            operationStatusMessage = "Cannot mount since all chunks are not accessible!";
+                                        }
                                         break;
                                     case "unmount":
                                         if (REDFS.redfsContainer.containerOperations.currentlyMountedVolume == b2.volumeId)
@@ -612,9 +728,22 @@ namespace REDFS_ClusterMode
                             {
                                 Console.WriteLine(e.Message);
                             }
-                            string json = JsonConvert.SerializeObject(new GenericSuccessReply(), Formatting.Indented);
-                            byte[] data = Encoding.UTF8.GetBytes(json);
-                            await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                            if (operationSucessfull)
+                            {
+                                GenericSuccessReply gsr = new GenericSuccessReply();
+                                gsr.message = operationStatusMessage;
+                                string json = JsonConvert.SerializeObject(gsr, Formatting.Indented);
+                                byte[] data = Encoding.UTF8.GetBytes(json);
+                                await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                            }
+                            else
+                            {
+                                GenericFailureReply gfr = new GenericFailureReply();
+                                gfr.message = operationStatusMessage;
+                                string json = JsonConvert.SerializeObject(gfr, Formatting.Indented);
+                                byte[] data = Encoding.UTF8.GetBytes(json);
+                                await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                            }
                         }
                     }
                     resp.Close();
