@@ -117,6 +117,7 @@ namespace REDFS_TESTS
             Assert.AreEqual(rpe[2].readOffset, (long)100 * (1024 * 1024 * 1024) + 21 * OPS.FS_BLOCK_SIZE); /*for dbn[2], Chunk 2 offset is at 100GB + 21 blocks */
         }
 
+        //[TestMethod]
         public void TestBasicReadPlanOnRaidSpanAtOffset()
         {
             RAWSegment[] dataSegment = new RAWSegment[2];

@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading;
+using System.Web;
 
 namespace REDFS_ClusterMode
 {
@@ -271,7 +272,7 @@ namespace REDFS_ClusterMode
                         mso.dokan = DokanSideMetrics.GetJSONDump();
                         mso.core = REDFSCoreSideMetrics.GetJSONDump();
 
-                        string  output_str = JsonConvert.SerializeObject(mso, Formatting.None);
+                        string output_str = JsonConvert.SerializeObject(mso, Formatting.None);
                         byte[] output = Encoding.UTF8.GetBytes(output_str);
                         await resp.OutputStream.WriteAsync(output, 0, output.Length);
                     }
@@ -344,7 +345,7 @@ namespace REDFS_ClusterMode
                         byte[] data = Encoding.UTF8.GetBytes(json);
                         resp.OutputStream.Write(data);
                         resp.Close();
-                    } 
+                    }
                     catch (Exception e)
                     {
                         resp.OutputStream.Write(Encoding.UTF8.GetBytes(e.Message));
@@ -391,7 +392,7 @@ namespace REDFS_ClusterMode
                     if (isUserValid)
                     {
                         DBNSegmentSpanMap segmentMap = REDFS.redfsContainer.getSegmentSpanMap();
-                        String jsonData =  JsonConvert.SerializeObject(segmentMap, Formatting.None);
+                        String jsonData = JsonConvert.SerializeObject(segmentMap, Formatting.None);
                         byte[] data = Encoding.UTF8.GetBytes(jsonData);
                         await resp.OutputStream.WriteAsync(data, 0, data.Length);
                     }
@@ -410,15 +411,39 @@ namespace REDFS_ClusterMode
                                 string json = JsonConvert.SerializeObject(new GenericSuccessReply(), Formatting.Indented);
                                 byte[] data = Encoding.UTF8.GetBytes(json);
                                 await resp.OutputStream.WriteAsync(data, 0, data.Length);
-                                REDFS.redfsContainer.containerOperations.CreateNewOperation(ALLOWED_OPERATIONS.COMPRESS_CONTAINER, "Compression", "Compressing","");
+                                REDFS.redfsContainer.containerOperations.CreateNewOperation(ALLOWED_OPERATIONS.COMPRESS_CONTAINER, "Compression", "Compressing", "");
                                 break;
                             case "dedupe":
                                 string json2 = JsonConvert.SerializeObject(new GenericSuccessReply(), Formatting.Indented);
                                 byte[] data2 = Encoding.UTF8.GetBytes(json2);
                                 await resp.OutputStream.WriteAsync(data2, 0, data2.Length);
-                                REDFS.redfsContainer.containerOperations.CreateNewOperation(ALLOWED_OPERATIONS.DEDUPE_CONTAINER, "Dedupe", "Deduping","");
+                                REDFS.redfsContainer.containerOperations.CreateNewOperation(ALLOWED_OPERATIONS.DEDUPE_CONTAINER, "Dedupe", "Deduping", "");
                                 break;
                             default:
+                                break;
+                        }
+                    }
+                    resp.Close();
+                }
+                else if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/redFSFileSystem"))
+                {
+                    if (isUserValid)
+                    {
+                        string request = new StreamReader(ctx.Request.InputStream).ReadToEnd();
+                        REDFSSystemOperation b2 = JsonConvert.DeserializeObject<REDFSSystemOperation>(request);
+
+                        switch (b2.operation)
+                        {
+                            case "list":
+                                b2.PopulateResult();
+                                byte[] data = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(b2.list, Formatting.None));
+                                await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                                break;
+                            case "clone":
+
+                                break;
+                            case "move":
+
                                 break;
                         }
                     }
@@ -474,11 +499,11 @@ namespace REDFS_ClusterMode
                             case "runBackupJob":
                                 REDFS.redfsContainer.containerOperations.CreateNewOperation(ALLOWED_OPERATIONS.BACKUP_OP, "Backup", "Backing up", b2.backupTaskId + "," + b2.backupJobName);
                                 break;
-                           default:
+                            default:
                                 break;
                         }
-                        
-                        
+
+
                     }
                     resp.Close();
                 }
@@ -558,7 +583,7 @@ namespace REDFS_ClusterMode
                         //XXX dont confuse with each other.
                         OperationData b2 = JsonConvert.DeserializeObject<OperationData>(request);
 
-                        switch(b2.OpName)
+                        switch (b2.OpName)
                         {
                             case "delete_operation":
                                 string json = "";
@@ -566,7 +591,7 @@ namespace REDFS_ClusterMode
                                 {
                                     json = JsonConvert.SerializeObject(new GenericSuccessReply(), Formatting.Indented);
 
-                                } 
+                                }
                                 else
                                 {
                                     json = JsonConvert.SerializeObject(new GenericFailureReply(), Formatting.Indented);
@@ -580,7 +605,7 @@ namespace REDFS_ClusterMode
                     }
                     resp.Close();
                 }
-                else if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/chunkRemoveOrMoveOrDeleteOperation")) 
+                else if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/chunkRemoveOrMoveOrDeleteOperation"))
                 {
                     if (isUserValid)
                     {
@@ -664,7 +689,7 @@ namespace REDFS_ClusterMode
 
                             try
                             {
-                                    switch (b2.operation)
+                                switch (b2.operation)
                                 {
                                     case "delete":
                                         if (volumeManager.DeleteVolume(b2.volumeId))
@@ -723,7 +748,7 @@ namespace REDFS_ClusterMode
                                     default:
                                         break;
                                 }
-                            } 
+                            }
                             catch (Exception e)
                             {
                                 Console.WriteLine(e.Message);
@@ -765,7 +790,7 @@ namespace REDFS_ClusterMode
                     if (req.Url.AbsolutePath == "/config")
                     {
                         string page = isUserValid ? docFolder + "\\REDFS\\Global\\WebUIAssets\\jamaica.html" : docFolder + "\\REDFS\\Global\\WebUIAssets\\login.html";
-                        
+
                         byte[] data = Encoding.UTF8.GetBytes(File.ReadAllText(page));
                         resp.ContentType = "text/html";
                         resp.ContentEncoding = Encoding.UTF8;
@@ -786,15 +811,103 @@ namespace REDFS_ClusterMode
                         await resp.OutputStream.WriteAsync(data, 0, data.Length);
                         resp.Close();
                     }
-                    else if ((req.HttpMethod == "GET") && (req.Url.AbsolutePath == "/slideGraph.js"))
+                    else if ((req.HttpMethod == "GET") && ((req.Url.AbsolutePath == "/slideGraph.js") || (req.Url.AbsolutePath == "/zTreeStyle.css") ||
+                            (req.Url.AbsolutePath == "/jquery.ztree.core.js") || (req.Url.AbsolutePath == "/font-awesome.css") ||
+                             (req.Url.AbsolutePath == "/jquery.simplefilebrowser.css") || (req.Url.AbsolutePath == "/jquery.simplefilebrowser.js")))
                     {
                         if (isUserValid)
                         {
-                            byte[] data = Encoding.UTF8.GetBytes(File.ReadAllText(docFolder + "\\REDFS\\Global\\WebUIAssets\\slideGraph.js"));
-                            resp.ContentType = "text/javascript";
+                            string hostFileRelativePath = "";
+                            switch (req.Url.AbsolutePath)
+                            {
+                                case "/slideGraph.js":
+                                    resp.ContentType = "text/javascript";
+                                    hostFileRelativePath = "\\REDFS\\Global\\WebUIAssets\\slideGraph.js";
+                                    break;
+                                case "/zTreeStyle.css":
+                                    resp.ContentType = "text/css";
+                                    hostFileRelativePath = "\\REDFS\\Global\\WebUIAssets\\zTreeStyle.css";
+                                    break;
+                                case "/jquery.ztree.core.js":
+                                    resp.ContentType = "text/javascript";
+                                    hostFileRelativePath = "\\REDFS\\Global\\WebUIAssets\\jquery.ztree.core.js";
+                                    break;
+                                case "/font-awesome.css":
+                                    resp.ContentType = "text/css";
+                                    hostFileRelativePath = "\\REDFS\\Global\\WebUIAssets\\browser\\font-awesome.css";
+                                    break;
+                                case "/jquery.simplefilebrowser.css":
+                                    resp.ContentType = "text/css";
+                                    hostFileRelativePath = "\\REDFS\\Global\\WebUIAssets\\browser\\jquery.simplefilebrowser.css";
+                                    break;
+                                case "/jquery.simplefilebrowser.js":
+                                    resp.ContentType = "text/javascript";
+                                    hostFileRelativePath = "\\REDFS\\Global\\WebUIAssets\\browser\\jquery.simplefilebrowser.js";
+                                    break;
+                            }
+
+                            byte[] data = Encoding.UTF8.GetBytes(File.ReadAllText(docFolder + hostFileRelativePath));
                             resp.ContentEncoding = Encoding.UTF8;
                             resp.ContentLength64 = data.LongLength;
                             await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                        }
+                        resp.Close();
+                    }
+                    else if (((req.HttpMethod == "GET") || (req.HttpMethod == "POST")) && (req.Url.AbsolutePath == "/folder.php"))
+                    {
+                        if (isUserValid)
+                        {
+                            string hostFileRelativePath = "";
+                            switch (req.Url.AbsolutePath)
+                            {
+                                case "/folder.php":
+                                    if (req.HttpMethod == "POST")
+                                    {
+                                        string request = new StreamReader(ctx.Request.InputStream).ReadToEnd();
+                                        string pathx = HttpUtility.UrlDecode(request);
+
+                                        string pathy = pathx.Split("=")[1];
+                                        try
+                                        {
+                                            string[] items = pathy.Split("/");
+                                            int fsid = Int32.Parse(items[1]);
+                                            string command = items[2];
+                                            StringBuilder sb = new StringBuilder();
+                                            for (int i = 3; i < items.Length; i++)
+                                            {
+                                                sb.Append(items[i]).Append("\\");
+                                            }
+
+                                            string path = (items.Length == 3)? "\\" : "\\" + sb.Remove(sb.Length - 1, 1).ToString();
+
+                                            REDFSSystemOperation rso = new REDFSSystemOperation();
+                                            rso.fsid = fsid;
+                                            rso.path = path;
+                                            rso.operation = command;
+                                            rso.PopulateResult();
+
+                                            resp.ContentType = "application/json";
+                                            byte[] data1 = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(rso.list, Formatting.None));
+                                            await resp.OutputStream.WriteAsync(data1, 0, data1.Length);
+                                        } 
+                                        catch (Exception e)
+                                        {
+
+                                        }
+                                    }
+                                    else
+                                    {
+                                        resp.ContentType = "application/json";
+                                        hostFileRelativePath = "\\REDFS\\Global\\WebUIAssets\\browser\\folder2.json";
+
+                                        byte[] data = Encoding.UTF8.GetBytes(File.ReadAllText(docFolder + hostFileRelativePath));
+                                        resp.ContentEncoding = Encoding.UTF8;
+                                        resp.ContentLength64 = data.LongLength;
+                                        await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                                    }
+                                    break;
+                            }
+
                         }
                         resp.Close();
                     }
@@ -830,22 +943,25 @@ namespace REDFS_ClusterMode
                         await resp.OutputStream.WriteAsync(data, 0, data.Length);
                         resp.Close();
                     }
-                    else if (req.Url.AbsolutePath == "/clone.png" || req.Url.AbsolutePath == "/justclone.png" || req.Url.AbsolutePath == "/snapshot.png" || 
-                        req.Url.AbsolutePath == "/delete.png" || req.Url.AbsolutePath == "/mount.png")
+                    else if (req.Url.AbsolutePath == "/clone.png" || req.Url.AbsolutePath == "/justclone.png" || req.Url.AbsolutePath == "/snapshot.png" ||
+                        req.Url.AbsolutePath == "/delete.png" || req.Url.AbsolutePath == "/mount.png" ||
+                        req.Url.AbsolutePath == "/img/zTreeStandard.png" || req.Url.AbsolutePath == "/img/zTreeStandard.gif" ||
+                        req.Url.AbsolutePath == "/img/line_conn.gif" || req.Url.AbsolutePath == "/img/loading.gif")
                     {
-                        string filename = req.Url.AbsolutePath.Substring(1, req.Url.AbsolutePath.Length-1);
+                        string filename = req.Url.AbsolutePath.Substring(1, req.Url.AbsolutePath.Length - 1);
                         try
                         {
                             byte[] data = File.ReadAllBytes(docFolder + "\\REDFS\\Global\\WebUIAssets\\" + filename);
                             if (data.Length > 0)
                             {
-                                resp.ContentType = "image/png";
+                                resp.ContentType = (req.Url.AbsolutePath.IndexOf(".gif") > 0) ? "image/gif" : "image/png";
                                 resp.ContentEncoding = Encoding.Default;
                                 resp.ContentLength64 = data.LongLength;
                                 // Write out to the response stream (asynchronously), then close it
                                 await resp.OutputStream.WriteAsync(data, 0, data.Length);
                             }
-                        } catch (Exception e)
+                        }
+                        catch (Exception e)
                         {
 
                         }
@@ -853,7 +969,8 @@ namespace REDFS_ClusterMode
                     }
                     else
                     {
-                        byte[] data = Encoding.UTF8.GetBytes("504 Error Idiot");
+                        Console.WriteLine("Not found: " + req.Url.AbsolutePath);
+                        byte[] data = Encoding.UTF8.GetBytes("504 Error Idiot : " + req.Url.AbsolutePath);
                         resp.ContentType = "text/html";
                         resp.ContentEncoding = Encoding.UTF8;
                         resp.ContentLength64 = data.LongLength;

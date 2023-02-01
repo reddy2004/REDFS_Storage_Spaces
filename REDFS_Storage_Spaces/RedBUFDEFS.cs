@@ -213,7 +213,7 @@ namespace REDFS_ClusterMode
             is_dirty = false;
             m_dbn = 0;
             m_exists_ondisk = false;
-            mTimeToLive = 1;
+            mTimeToLive = 2;
             Array.Clear(data, 0, OPS.FSID_BLOCK_SIZE);
         }
 

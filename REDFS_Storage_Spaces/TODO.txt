@@ -32,3 +32,8 @@ Data shown in explorer is also wrtong. Ex. 2.5 gb used in 2gb harddisk. very wro
 in redfs ui
 
 Avoid calling touch refcount on blocks that are allocated during write path. For all files including the inode file.
+
+
+Prepare chunk for removal
+Delete chunk
+Delete volume

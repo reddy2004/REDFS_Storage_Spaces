@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
+using System.Collections;
 
 namespace REDFS_ClusterMode
 {
@@ -25,8 +26,65 @@ namespace REDFS_ClusterMode
             }
         }
 
-        //Outgoing object from the server (this program) side.
-        public class ListOfFolderContents
+    public class FileDirItem
+    {
+        public string name;
+        public string type;
+
+        public FileDirItem(string n, string t)
+        {
+            name = n;
+            type = t;
+        }
+    }
+
+    public class webFileBrowserRequest
+    {
+        public string path;
+    }
+
+    public class REDFSSystemOperation
+    {
+
+        public string operation;
+        public string path;
+        public int fsid;
+
+        public string sourceFileOrDirPath = "";
+        public string destinationFileOrDirPath = "";
+
+        public LinkedList<FileDirItem> list = new LinkedList<FileDirItem>();
+
+        public REDFSSystemOperation()
+        {
+
+
+        }
+
+        public void PopulateResult()
+        {
+            if (operation == "no-load")
+            {
+                //do nothing, send empty list.
+                list.Clear();
+            }
+            else if (operation == "list")
+            {
+                IList<DokanNet.FileInformation> flist = REDFS.redfsContainer.ifsd_mux.RedfsVolumeTrees[fsid].FindFilesWithPattern(path, "*");
+
+                foreach (DokanNet.FileInformation f in flist)
+                {
+                    int index = f.FileName.LastIndexOf(".");
+                    string extension = f.FileName.Substring(index + 1, f.FileName.Length - index - 1);
+                    string type = f.Attributes.HasFlag(FileAttributes.Directory) ? "folder" : extension;
+                    list.AddLast(new FileDirItem(f.FileName, type));
+                }
+            }
+        }
+    }
+
+    //Outgoing object from the server (this program) side.
+    public class ListOfFolderContents
         {
             public string parent;
             public LinkedList<string> files;

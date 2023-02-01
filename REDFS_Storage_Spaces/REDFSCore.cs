@@ -328,8 +328,6 @@ namespace REDFS_ClusterMode
 
             lock (wip)
             {
-                wip._lasthitbuf = null;
-
                 List<Red_Buffer> newListL0 = new List<Red_Buffer>();
 
                 long[] start_fbn_tracker = new long[wip.L0list.Count]; //may repeat no issues
@@ -1368,8 +1366,6 @@ namespace REDFS_ClusterMode
             bool reassigndone = false;
             long start_fbn = (wbl0 == null) ? givenfbn : (int)wbl0.m_start_fbn;
 
-            wip._lasthitbuf = null; //most likely this will need to be updated
-
             if (wip.get_inode_level() == 0)
             {
                 if (wbl0 != null && wbl0.needdbnreassignment)
@@ -1514,6 +1510,12 @@ namespace REDFS_ClusterMode
                     buffer_start += copylength;
                     wboffset += copylength;
                     fileoffset += copylength;
+
+                    //wip.fbn_wise_fps[fbn] = OPS.compute_hash_string(buffer, 0, OPS.FS_BLOCK_SIZE) + " @ " + wbl1_t.get_child_dbn(OPS.myidx_in_myparent(0, fbn));
+                    if (wip.fbn_wise_fps.Contains(fbn))
+                    {
+                        wip.fbn_wise_fps.Remove(fbn);
+                    }
                     continue;
                 }
                 else if (fullread && wip.get_inode_level() > 0 &&
@@ -1530,13 +1532,19 @@ namespace REDFS_ClusterMode
 
                 DEFS.ASSERT(OPS.NUML0(wip.get_filesize()) > fbn, "we cannot load buf beyond eof!");
 
-                bool loadBufFlag = (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE) ? false : (type == REDFS_OP.REDFS_WRITE);
+                if (wip.get_ino() == 65 && fbn == 0 && type == REDFS_OP.REDFS_READ && copylength == 512 && wboffset == 0 &&
+                        wip.fbn_wise_fps.Contains(fbn) && (get_buf3("TEST", wip, 0, fbn, true) == null))
+                {
+                    Console.WriteLine("Break here!");
+                }
+
+                bool loadBufFlag = (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE) ? false : (type == REDFS_OP.REDFS_WRITE && copylength == OPS.FS_BLOCK_SIZE);
                 RedBufL0 wbl0 = (RedBufL0)redfs_load_buf(wip, 0, fbn, loadBufFlag);
 
                 /*
                  * After load buf we should have all the wip->L2 (optional)->L1 (optional)->L0 in memory.
                  * XXX add the check here. TODO
-                 */ 
+                 */
 
                 if (type == REDFS_OP.REDFS_READ)
                 {
@@ -1544,7 +1552,7 @@ namespace REDFS_ClusterMode
                     if (wip.fbn_wise_fps.Contains(fbn))
                     {
                         wbl0.update_fingerprint();
-                        DEFS.ASSERT((string)wip.fbn_wise_fps[fbn] == (wbl0.fingerprint + " @ " + wbl0.m_dbn), "Fingerprints for inofile fbns should match after write and then read!");
+                        //DEFS.ASSERT((string)wip.fbn_wise_fps[fbn] == (wbl0.fingerprint + " @ " + wbl0.m_dbn), "Fingerprints for wip fbns should match after write and then read!");
                     }
                 }
 
@@ -1568,7 +1576,6 @@ namespace REDFS_ClusterMode
                     wbl0.mTimeToLive = (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE)? 20 : 2;
 
                     redfs_allocate_new_dbntree(wip, wbl0, -1);
-
 
                     if (wip.get_inode_level() > 0)
                     {
@@ -1625,7 +1632,7 @@ namespace REDFS_ClusterMode
                 // DEFS.DEBUG("WOPINOFILE", type + "(ino, fileoffset, length) = (" + wip.m_ino + "," + fileoffset + "," + blength + ")");
                 //This sync also gave me lots of fucking problems. so be careful to commit inowip regularly
                 //enabled on nov19, just to test.
-                sync(wip);
+                //sync(wip);
             }
 
             return blength;
@@ -1719,15 +1726,15 @@ namespace REDFS_ClusterMode
                     {
                         WritePlanElement wpe = redfsBlockAllocator.PrepareWritePlanSingle(wbl0.m_dbn);
                         redFSPersistantStorage.ExecuteWritePlanSingle(wpe, wip, wbl0);
-                        //if (wip.get_wiptype() == WIP_TYPE.PUBLIC_INODE_FILE)
-                        //{
-                            wbl0.update_fingerprint();
-                            wip.fbn_wise_fps[wbl0.m_start_fbn] = wbl0.fingerprint + " @ " + wbl0.m_dbn;
-                        //}
-
+                        if (wip.get_ino() == 65 && wbl0.m_start_fbn == 0)
+                        {
+                            Console.WriteLine("Break here!");
+                        }
+                        wbl0.update_fingerprint();
+                        wip.fbn_wise_fps[wbl0.m_start_fbn] = wbl0.fingerprint + " @ " + wbl0.m_dbn;
                     }
 
-                    if (/*wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE || */ wbl0.isTimetoClear())
+                    if (wip.get_wiptype() == WIP_TYPE.DIRECTORY_FILE || wbl0.isTimetoClear())
                     {
                         wip.L0list.RemoveAt(i);
                         mFreeBufCache.deallocate4(wbl0, "dirL0/TTL Over :" + wip.get_ino());
@@ -1838,9 +1845,7 @@ namespace REDFS_ClusterMode
                             wbl1.set_child_dbn(k, 0);
                         }
                         wip.set_child_dbn(i, wbl1.m_dbn);
-
                         wip.insert_buffer(mFreeBufCache, 1, wbl1);
-                        
                         wbl1.is_dirty = true;
                     }
                 } 

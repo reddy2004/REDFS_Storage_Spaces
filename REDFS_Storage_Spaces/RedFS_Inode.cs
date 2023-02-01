@@ -284,6 +284,10 @@ namespace REDFS_ClusterMode
                     }
                     list.Remove(rb);
                     insert_buffer(mFreeBufCache, level, wb);
+                    if (_lasthitbuf.get_start_fbn() == wb.get_start_fbn())
+                    {
+                        _lasthitbuf = wb;
+                    }
                     return;
                 }
             }

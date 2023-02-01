@@ -291,6 +291,11 @@ namespace REDFS_ClusterMode
                 isDirty = true;
                 touch_inode_obj();
 
+                if (myWIP.get_ino() == 65)
+                {
+                    Console.WriteLine("Write: offset:" + offset + ", buffer : " + buffer.Length);
+                }
+
                 long current_wip_size = myWIP.get_filesize();
                 long end_of_file = buffer.Length + offset;
                 if (end_of_file > current_wip_size)
@@ -306,6 +311,10 @@ namespace REDFS_ClusterMode
         {
             lock (this)
             {
+                if (myWIP.get_ino() == 65)
+                {
+                    Console.WriteLine("Read: offset:" + offset + ", buffer : " + buffer.Length);
+                }
                 if (offset > myWIP.size)
                 {
                     //log error
