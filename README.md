@@ -21,3 +21,11 @@ REDFS Storage Space itself is spread over multiple regular NTFS files potentiall
 You can specify what is the speed class of the Chunk when you add it to REDFS. The summary is available in the config tab.
 
 ![alt text](https://github.com/reddy2004/REDFS_Storage_Spaces/blob/main/REDFS_Storage_Spaces/Data/Screenshots/config_chunks.png)
+
+The layout of REDFS projects a total space of 128TB. This 128TB is mapped across many files present on the HOST operating system. For ex. You could spread the 128TB of REDFS file system over 128 1TB files on your HOST file system. Each 1GB is called a segment and each segment has its own protection settings.
+
+![alt text](https://github.com/reddy2004/REDFS_Storage_Spaces/blob/main/REDFS_Storage_Spaces/Data/Screenshots/disk_layout.png)
+
+The logical layout looks like below. Each of the volumes you see can be mounted independent of each other. It is possible to clone/move files across these volumes.
+
+![alt text](https://github.com/reddy2004/REDFS_Storage_Spaces/blob/main/REDFS_Storage_Spaces/Data/Screenshots/logical_layout_2.png)
