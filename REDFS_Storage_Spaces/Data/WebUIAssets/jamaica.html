@@ -5,11 +5,11 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
-
+        <script src="https://use.fontawesome.com/5397cd5541.js"></script>
         <title>REDFS</title>
     </head>
     <body>
-
+        <link rel="stylesheet" href="zTreeStyle.css" type="text/css">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
@@ -28,6 +28,25 @@
         <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.0rc1/angular-route.min.js"></script> 
         <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js"></script> 
         
+        <script type="text/javascript" src="jquery.ztree.core.js"></script>
+
+        <link rel="stylesheet" type="text/css" href="jquery.simplefilebrowser.css">
+        <script src="jquery.simplefilebrowser.js"></script> 
+        <script src="musica.js"></script>
+  <SCRIPT type="text/javascript">
+    <!--
+
+
+
+    $().ready(function(){
+
+
+
+    });
+
+    //-->
+  </SCRIPT>
+
         <div ng-controller="myCtrl">
 
 
@@ -828,6 +847,52 @@
               </div>
             </div>
 
+            <!-- Modal in progress -->
+            <div class="modal fade" id="clonerWindow" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_webfs_1" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_cm_1"> Clone inode Command</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        The file selected L to R or R to L will be cloned. Confirm the destination.
+
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button"  class="btn btn-info" ng-click="">Clone File/directory</button>
+                        
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Modal in progress -->
+            <div class="modal fade" id="moverWindow" tabindex="-1" role="dialog" aria-labelledby="redfs_modal_webfs_2" aria-hidden="true">
+              <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="redfs_modal_cm_2"> Move inode Command</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                    <div class="modal-body">
+                        The file/directory selected L to R or R to L will be moved. Confirm the destination.
+
+                    </div>
+                  <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button"  class="btn btn-info" ng-click="">Move File/directory</button>
+                        
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="container-fluid bg-dark">
                 <div class="row">
                     <div class="col-10 bg-light" style="padding: 15px; text-align: center; border-radius: 25px;">
@@ -846,17 +911,23 @@
 
                 <div class="container-fluid" style="padding: 10px; ">
                     <div class="row">
-                        <div id="sharedvols" class="col-3 bg-link" style="padding: 5px; text-align: center;">
+                        <div id="sharedvols" class="col-2 bg-link" style="padding: 5px; text-align: center;">
                             <a href="#" ng-click="gotoTab('mountedVolume')"> Volume Tree </a>
                         </div>
-                        <div id="snapshotvols" class="col-3 bg-link" style="padding: 5px; text-align: center;">
+                        <div id="snapshotvols" class="col-2 bg-link" style="padding: 5px; text-align: center;">
                             <a href="#" ng-click="gotoTab('allSnapshots')"> All vols/snapshots/clones </a>
                         </div>
-                        <div id="aggrops" class="col-3 bg-link" style="padding: 5px; text-align: center;">
+                        <div id="aggrops" class="col-2 bg-link" style="padding: 5px; text-align: center;">
                             <a href="#" ng-click="gotoTab('liveMetrics')"> Live Metrics </a>
                         </div>
-                        <div id="aggrconfig" class="col-3 bg-link" style="padding: 5px; text-align: center;">
+                        <div id="aggrconfig" class="col-2 bg-link" style="padding: 5px; text-align: center;">
                             <a href="#" ng-click="gotoTab('config')"> Config </a>
+                        </div>
+                        <div id="webfsbrowser" class="col-2 bg-link" style="padding: 5px; text-align: center;">
+                            <a href="#" ng-click="gotoTab('webFSbrowser')"> FS Browser </a>
+                        </div>
+                        <div id="webfiledircloner" class="col-2 bg-link" style="padding: 5px; text-align: center;">
+                            <a href="#" ng-click="gotoTab('webFileDirCloner')"> Web File/Dir Cloner </a>
                         </div>
                     </div>
                     <div class="row" style="height: 10px;">
@@ -1159,10 +1230,78 @@
                                         <td><input type="number" name="v1114" id="v1114" value="" placeholder="enter fsid number" size=10></td>
                                         <td> <a href="" ng-click="visualizeBlockInfoDebug('fsid')"> View </a> </td>
                                     </tr>
+                                    <tr>
+                                        <td> Tree Indirect block </td>
+                                        <td style="text-align: center; padding-left: 100px; padding-right: 100px;"> Examine an indirect L1/L2 block </td>
+                                        <td><input type="number" name="v1115" id="v1115" value="" placeholder="enter dbn number" size=10></td>
+                                        <td> <a href="" ng-click="visualizeBlockInfoDebug('L1L2indirect')"> View </a> </td>
+                                    </tr>
+                                    <tr>
+                                        <td> Inode bitmap block </td>
+                                        <td style="text-align: center; padding-left: 100px; padding-right: 100px;"> Examine an inode allocation bitmap block (show full block where this inode is present) </td>
+                                        <td><input type="number" name="v1116" id="v1116" value="" placeholder="Enter inode number" size=10></td>
+                                        <td> <a href="" ng-click="visualizeBlockInfoDebug('inomap')"> View </a> </td>
+                                    </tr>
+                                    <tr>
+                                        <td> Refcount block </td>
+                                        <td style="text-align: center; padding-left: 100px; padding-right: 100px;"> Examine a dbn refcount (shows full block in that range) </td>
+                                        <td><input type="number" name="v1117" id="v1117" value="" placeholder="enter dbn number" size=10></td>
+                                        <td> <a href="" ng-click="visualizeBlockInfoDebug('refcount')"> View </a> </td>
+                                    </tr>
                                 <tbody>
                             </table>
                         </div>
                         <br><br><br> <br><br><br><br><br>
+                    </div>
+
+                    <div class="row" ng-show="currentTab == 'webFSbrowser'">
+                        <div class="col-12 bg-light" id="fsbrowser">
+                            <TABLE border=0 height=600px align=left>
+                              <TR>
+                                <TD width=400px align=left valign=top style="BORDER-RIGHT: #999999 1px dashed">
+                                  <ul id="tree" class="ztree" style="width:400px; overflow:scroll;"></ul>
+                                </TD>
+                              </TR>
+                            </TABLE>
+
+
+                            <table>
+                                <tbody> 
+                                    Select Volume/Directory/File debug details come here.
+                                </tbody>
+                            </table>
+                           </div>
+                    </div>
+
+                    <div class="row" ng-show="currentTab == 'webFileDirCloner'">
+                        <div class="col-12 bg-light" id="cloner1"> 
+                            Load the two FSIDs you want to  move files from/to. The FSIDs could be the same.
+                            Either clone/move files/directories within the same FSID or across FSIDs
+                        </div>
+
+                            <br><br><br>
+
+                            <div class=" col-5 bg-light" id="leftside" style="height:700px; align='left'; overflow: scroll;">
+                                <div><input type="text" name="fsid1" id="fsid_1" placeholder="Enter fsid/volid 1" style="float: left;" ng-disabled="ClonerWindowData.leftFSID != -1"> &nbsp; <button type="button"  ng-click="mountLeftFSID()" ng-disabled="ClonerWindowData.leftFSID != -1">  Mount </button> <button type="button"  ng-click="unmountLeftFSID()" ng-disabled="ClonerWindowData.leftFSID == -1">  Unmount </button> </div>
+                                <br>
+                                <div id="example1"></div>
+                             </div>
+                            <div class=" col-2 bg-white" id="centerside" style="height:700px; align='center';">
+                                    <br> <br><br> <br><br> <br><br> <br>
+                                     <button type="button" ng-click="cloneLeftToRight()" style="align: center;" ng-disabled="ClonerWindowData.leftFSID == -1 || ClonerWindowData.rightFSID == -1"> >> Clone >> (L to R)</button>
+                                     <br> <br>
+                                       <button type="button" ng-click="cloneRightToLeft()" style="align: center;" ng-disabled="ClonerWindowData.leftFSID == -1 || ClonerWindowData.rightFSID == -1"><< Clone << (R to L)</button>
+                                       <br><br>
+                                       <button type="button" ng-click="moveLeftToRight()" style="align: center;" ng-disabled="ClonerWindowData.leftFSID == -1 || ClonerWindowData.rightFSID == -1">>> Move >> (L to R)</button>
+                                      <br> <br>
+                                      <button type="button" ng-click="moveRightToLeft()" style="align: center;" ng-disabled="ClonerWindowData.leftFSID == -1 || ClonerWindowData.rightFSID == -1"><< Move << (R to L)</button>
+                             </div>
+                            <div class=" col-5 bg-light" id="rightside" style="height:700px;align='right'; overflow: scroll;"> 
+                                <div> <input type="text" name="fsid2" id="fsid_2" placeholder="Enter fsid/volid 2" style="float: left;" ng-disabled="ClonerWindowData.rightFSID != -1"> &nbsp; <button type="button" ng-click="mountRightFSID()" ng-disabled="ClonerWindowData.rightFSID != -1">  Mount </button> <button type="button"  ng-click="unmountRightFSID()" ng-disabled="ClonerWindowData.rightFSID == -1"> Unmount </button></div>
+                                <br>
+                                <div id="files1"></div>
+                            </div>
+
                     </div>
                 </div>
             </div>

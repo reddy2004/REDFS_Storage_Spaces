@@ -12,6 +12,10 @@ var myApp = angular.module('myApp11',['ngRoute']);
 
 myApp.controller('myCtrl', ['$scope', function($scope) {
 
+    $scope.zNodes = [
+      {id: 1, pId: 0, name: "000", open: true},
+    ];
+
     $scope.globalData = {};
 
     $scope.currentlyViewingVolumeId = 0;
@@ -66,6 +70,14 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
     $scope.listOfKnownBackupsInContainer = {};
 
+    $scope.ClonerWindowData = {};
+
+
+    $scope.ClonerWindowData.leftFSID = -1;
+    $scope.ClonerWindowData.rightFSID = -1;
+    $scope.ClonerWindowData.leftSelectedPath = "";
+    $scope.ClonerWindowData.rightSelectedPath = "";
+
     $("head").append (
         '<link '
         + 'href="//cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.css" '
@@ -86,7 +98,82 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
     $scope.notYetImplimented = function()
     {
-        alert("Not yet implimented");
+        alert("Not yet implimented 2");
+        $("#tree_17_span2").css("background-color", "red");
+    }
+
+    $scope.mountLeftFSID = function() {
+        var fsid = $("#fsid_1").val();
+        //alert(fsid);
+        $scope.ClonerWindowData.leftFSID = fsid;
+
+        /*
+        var redFSSystemOperation = {};
+        redFSSystemOperation.operation = "list";
+        redFSSystemOperation.path = "/";
+        redFSSystemOperation.fsid = fsid;
+        redFSSystemOperation.list = [];
+        redFSSystemOperation.sourceFileOrDirPath = "";
+        redFSSystemOperation.destinationFileOrDirPath = "";
+        */
+
+        var path_t = "/" + fsid + "/list" + "/"; 
+        $("#example1").simpleFileBrowser("chgOption", {
+            path: path_t
+        });
+
+        //$( "#example1" ).simpleFileBrowser("redraw");
+    }
+
+    $scope.mountRightFSID = function() {
+         var fsid = $("#fsid_2").val();
+         //alert(fsid);
+         $scope.ClonerWindowData.rightFSID = fsid;
+
+        var path_t = "/" + fsid + "/list" + "/"; 
+        $("#files1").simpleFileBrowser("chgOption", {
+            path: path_t
+        });
+    }
+
+    $scope.unmountLeftFSID = function() {
+        var fsid = $("#fsid_1").val();
+         $scope.ClonerWindowData.leftFSID = -1;
+
+        var path_t = "/0/no-load/"; 
+        $("#example1").simpleFileBrowser("chgOption", {
+            path: path_t
+        });
+    }
+
+    $scope.unmountRightFSID = function() {
+        var fsid = $("#fsid_2").val();
+        $scope.ClonerWindowData.rightFSID = -1;
+
+        var path_t = "/0/no-load/"; 
+        $("#files1").simpleFileBrowser("chgOption", {
+            path: path_t
+        });
+    }
+
+    $scope.cloneLeftToRight = function()
+    {
+        $("#clonerWindow").modal();
+    }
+
+    $scope.cloneRightToLeft = function()
+    {
+        $("#clonerWindow").modal();
+    }
+
+    $scope.moveLeftToRight = function()
+    {
+        $("#moverWindow").modal();
+    }
+
+    $scope.moveRightToLeft = function()
+    {
+        $("#moverWindow").modal();
     }
 
     $scope.showDedupePopup = function() {
@@ -405,6 +492,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
         $scope.visualizerLayerKonvaItem.draw();
 
     }
+
 
     var getStorageItemFromMouseXY = function(num_chunks, x , y, maxx, maxy)
     {
@@ -1127,7 +1215,42 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
     $(document).ready(function() {
           
+            var setting = {
+              view: {
+                dblClickExpand: false,
+                showLine: true,
+                selectedMulti: false
+              },
+              data: {
+                simpleData: {
+                  enable: true,
+                  idKey: "id",
+                  pIdKey: "pId",
+                  rootPId: ""
+                }
+              },
+              callback: {
+                beforeClick: function (treeId, treeNode) {
+                  var zTree = $.fn.zTree.getZTreeObj("tree");
+                  if (treeNode.isParent) {
+                    zTree.expandNode(treeNode);
+                    alert(JSON.stringify(treeNode));
+                    return false;
+                  } else {
+                    alert(JSON.stringify(treeNode));
+                    return true;
+                  }
+                }
+              }
+            };
+
           $(".loader").show();
+
+          var t = $("#tree");
+          t = $.fn.zTree.init(t, setting, $scope.zNodes);
+
+          var zTree = $.fn.zTree.getZTreeObj("tree");
+          zTree.selectNode(zTree.getNodeByParam("id", 1));
 
           //Set compression and dedupe flags
             $scope.compressionAndDedupeData.compressionIsRunning = false;
@@ -1157,6 +1280,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
                 volumeListData = JSON.parse(data);
                 console.log(data); 
                 updateVolumeStatusWithEmpty();
+                updateZTreeWithVolumeData();
           });  
 
           //Call once during page load
@@ -1288,11 +1412,52 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
 
           }
 
+          function updateZTreeWithVolumeData() {
+                //update $scope.zNodes with the correct list of volumes with all expanded tree
+                /*
+                        [
+                          {
+                            "status": "-",
+                            "isDirty": false,
+                            "volumeId": 0,
+                            "parentVolumeId": -1,
+                            "parentIsSnapshot": false,
+                            "volname": "root",
+                            "isDeleted": false,
+                            "logicalData": 0,
+                            "logicalDataStr": "0.00 B",
+                            "volumeCreateTime": "2023-08-04T19:53:35.4630132+05:30",
+                            "hexcolor": null,
+                            "volDescription": null,
+                            "isReadOnly": false
+                          }
+                        ]
+                        to 
+                        [
+                            {id: 1, pId: 0, name: "Root volume", open: true},
+                        ]
+                */
+                var array = volumeListData;
+                $scope.zNodes = [];
+                for(i in array) {
+                    $scope.zNodes.push({id : array[i].volumeId, pId: array[i].parentVolumeId, name : array[i].volname, open :true});
+                }
+
+                //update and render
+                  var t = $("#tree");
+                  t = $.fn.zTree.init(t, setting, $scope.zNodes);
+
+                  var zTree = $.fn.zTree.getZTreeObj("tree");
+                  zTree.selectNode(zTree.getNodeByParam("id", 0));
+
+          }
+
           function download_volume_data(callback) {
             $.get("allvolumelist", function( data ) {
                   volumeListData = JSON.parse(data);
                   console.log(data);
                   updateVolumeStatusWithEmpty();
+                  updateZTreeWithVolumeData();
                   callback(data);
             });  
           }
@@ -1819,7 +1984,7 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
           }
 
           //start with metrics page
-          $("#aggrconfig").attr('class', 'col-3 bg-light');
+          $("#aggrconfig").attr('class', 'col-2 bg-light');
           $scope.currentTab = 'config';
 
           update_table(true);
@@ -1828,6 +1993,62 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
         $scope.isDebugDataForGraphs = [[],[],[],[],[],[],[],[]];
         drawLinearGraphs($scope.isDebugDataForGraphs, $scope.isDebugDataForGraphs);
 
+        $('#table_id tbody').on('click', 'tr', function () {
+            var data = volumeTable.row(this).data();
+            $("#m2_volcolor").val(data.hexcolor);
+            $("#m2_volname").val(data.volname);
+            $("#m2_voldesc").val(data.volDescription);
+
+            $scope.currentlyViewingVolumeId = data.volumeId;
+            $scope.currentlyViewingVolumeLogicalData = data.logicalData;
+            $scope.currentlyViewingVolumeCreationTime = data.volumeCreateTime;
+            $scope.currentlyViewingVolumeName =data.volname;
+            $scope.isCurrentlyViewingVolumeDeleted = data.isDeleted;
+
+            $("#volumeInformation").modal();
+            //alert('You clicked on ' + data[0] + "'s row");
+        });
+
+        /*
+         * Load elements of the web based file system browser.
+         * Hows list of files and we can use this to clone or snapshot
+         * files/dirs in a volume or across volumes
+         */
+         $("#example1").simpleFileBrowser({
+            url: 'folder.php',
+            //json: musica_mini,
+            path: '/0/list/',
+            view: 'icon',
+            select: true,
+            breadcrumbs: true,
+            onSelect: function (obj, file, folder, type) {
+                //alert("You select a "+type+" "+folder+'/'+file);
+                $scope.ClonerWindowData.leftSelectedPath = folder+'/'+file;
+            },
+            onOpen: function (obj,file, folder, type) {
+                if (type=='file') {
+                    //alert("Open file: "+folder+'/'+file);
+                }
+            }
+         });
+
+
+        $("#files1").simpleFileBrowser({
+            url: 'folder.php',
+            path: '/0/list/',
+            view: 'icon',
+            select: true,
+            breadcrumbs: true,
+            onSelect: function (obj, file, folder, type) {
+                //alert("You select a "+type+" "+folder+'/'+file);
+                $scope.ClonerWindowData.rightSelectedPath = folder+'/'+file;
+            },
+            onOpen: function (obj,file, folder, type) {
+                if (type=='file') {
+                    //alert("Open file: "+folder+'/'+file);
+                }
+            }
+        });
     });
 
     $scope.operations = {};
@@ -1865,10 +2086,12 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
       $scope.currentTab = tabname;
 
        if (tabname == 'mountedVolume') {
-            $("#sharedvols").attr('class', 'col-3 bg-light');
-            $("#snapshotvols").attr('class', 'col-3 bg-link');
-            $("#aggrops").attr('class', 'col-3 bg-link');
-            $("#aggrconfig").attr('class', 'col-3 bg-link');
+            $("#sharedvols").attr('class', 'col-2 bg-light');
+            $("#snapshotvols").attr('class', 'col-2 bg-link');
+            $("#aggrops").attr('class', 'col-2 bg-link');
+            $("#aggrconfig").attr('class', 'col-2 bg-link');
+            $("#webfsbrowser").attr('class', 'col-2 bg-link');
+            $("#webfiledircloner").attr('class', 'col-2 bg-link');
             $("#xtable").show();
             $("#xconfig").hide();
             //update_table(true);
@@ -1876,20 +2099,24 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
         }
 
         if (tabname == 'allSnapshots') {
-            $("#sharedvols").attr('class', 'col-3 bg-link');
-            $("#snapshotvols").attr('class', 'col-3 bg-light');
-            $("#aggrops").attr('class', 'col-3 bg-link');
-            $("#aggrconfig").attr('class', 'col-3 bg-link');
+            $("#sharedvols").attr('class', 'col-2 bg-link');
+            $("#snapshotvols").attr('class', 'col-2 bg-light');
+            $("#aggrops").attr('class', 'col-2 bg-link');
+            $("#aggrconfig").attr('class', 'col-2 bg-link');
+            $("#webfsbrowser").attr('class', 'col-2 bg-link');
+            $("#webfiledircloner").attr('class', 'col-2 bg-link');
             $("#xtable").show();
             $("#xconfig").hide();
             //update_table(true);
         }
 
         if (tabname == 'liveMetrics') {
-            $("#sharedvols").attr('class', 'col-3 bg-link');
-            $("#snapshotvols").attr('class', 'col-3 bg-link');
-            $("#aggrops").attr('class', 'col-3 bg-light');
-            $("#aggrconfig").attr('class', 'col-3 bg-link');
+            $("#sharedvols").attr('class', 'col-2 bg-link');
+            $("#snapshotvols").attr('class', 'col-2 bg-link');
+            $("#aggrops").attr('class', 'col-2 bg-light');
+            $("#aggrconfig").attr('class', 'col-2 bg-link');
+            $("#webfsbrowser").attr('class', 'col-2 bg-link');
+            $("#webfiledircloner").attr('class', 'col-2 bg-link');
             $("#xtable").hide();
             $("#xconfig").show();
             $scope.createDataUsagePie();
@@ -1897,12 +2124,36 @@ myApp.controller('myCtrl', ['$scope', function($scope) {
         }
 
         if (tabname == 'config') {
-            $("#sharedvols").attr('class', 'col-3 bg-link');
-            $("#snapshotvols").attr('class', 'col-3 bg-link');
-            $("#aggrops").attr('class', 'col-3 bg-link');
-            $("#aggrconfig").attr('class', 'col-3 bg-light');
+            $("#sharedvols").attr('class', 'col-2 bg-link');
+            $("#snapshotvols").attr('class', 'col-2 bg-link');
+            $("#aggrops").attr('class', 'col-2 bg-link');
+            $("#aggrconfig").attr('class', 'col-2 bg-light');
+            $("#webfsbrowser").attr('class', 'col-2 bg-link');
+            $("#webfiledircloner").attr('class', 'col-2 bg-link');
             $("#xtable").hide();
             $("#xconfig").show();
+        }
+
+        if (tabname == 'webFSbrowser') {
+            $("#sharedvols").attr('class', 'col-2 bg-link');
+            $("#snapshotvols").attr('class', 'col-2 bg-link');
+            $("#aggrops").attr('class', 'col-2 bg-link');
+            $("#aggrconfig").attr('class', 'col-2 bg-link');
+            $("#webfsbrowser").attr('class', 'col-2 bg-light');
+            $("#webfiledircloner").attr('class', 'col-2 bg-link');
+            $("#xtable").hide();
+            $("#xconfig").show();
+        }
+
+        if (tabname == "webFileDirCloner") {
+            $("#sharedvols").attr('class', 'col-2 bg-link');
+            $("#snapshotvols").attr('class', 'col-2 bg-link');
+            $("#aggrops").attr('class', 'col-2 bg-link');
+            $("#aggrconfig").attr('class', 'col-2 bg-link');
+            $("#webfsbrowser").attr('class', 'col-2 bg-link');
+            $("#webfiledircloner").attr('class', 'col-2 bg-light');
+            $("#xtable").hide();
+            $("#xconfig").show();            
         }
     }
 

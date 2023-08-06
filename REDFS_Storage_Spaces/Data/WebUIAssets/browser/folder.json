@@ -1,0 +1,7 @@
+ {
+    "/" : [   {
+            "name": "index.html",
+            "type": "html"
+        }]
+    
+ }
